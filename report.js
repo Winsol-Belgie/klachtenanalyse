@@ -25,9 +25,12 @@ function chartImage(mode) {
   // witte achtergrond (PNG is anders transparant)
   const tmp = document.createElement('canvas'); tmp.width = c.width; tmp.height = c.height;
   const g = tmp.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, tmp.width, tmp.height); g.drawImage(c, 0, 0);
-  const lg = $('legend').cloneNode(true); lg.querySelectorAll('button, .yr-lbl, label.off').forEach((x) => x.remove());
-  const legend = [...lg.childNodes].map((x) => x.textContent.trim()).filter(Boolean).join(' · ');
-  const img = { data: tmp.toDataURL('image/png'), w: tmp.width, h: tmp.height, legend };
+  // legende: kleur + naam per lijn (zoals in de grafiek), plus de toelichting eronder
+  const series = chart.data.datasets.length > 1 || mode !== 'time'
+    ? chart.data.datasets.map((d) => ({ label: String(d.label), color: d.borderColor, dash: !!d.borderDash, bold: (d.borderWidth || 2) >= 3 }))
+    : [];
+  const noteEl = [...$('legend').children].find((x) => x.tagName === 'DIV');
+  const img = { data: tmp.toDataURL('image/png'), w: tmp.width, h: tmp.height, series, note: noteEl ? noteEl.textContent.trim() : '' };
   UI.mode = keep;
   renderTrend();
   return img;
@@ -58,6 +61,24 @@ async function makePdfReport() {
       const lines = doc.splitTextToSize(pdfTxt(s), CW);
       need(lines.length * size * 0.42 + 1);
       doc.text(lines, M, y + 3); y += lines.length * size * 0.42 + 2;
+    };
+
+    const rgb = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '')); const n = m ? parseInt(m[1], 16) : 0x9ca3af; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const drawLegend = (items) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      let x = M; need(6); y += 1;
+      for (const it of items) {
+        const lab = pdfTxt(it.label); const w = 9 + doc.getTextWidth(lab) + 5;
+        if (x + w > M + CW) { x = M; y += 5; need(5); }
+        doc.setDrawColor(...rgb(it.color)); doc.setLineWidth(it.bold ? 1.4 : 1);
+        if (it.dash) doc.setLineDashPattern([1.2, 0.8], 0);
+        doc.line(x, y + 1.8, x + 6, y + 1.8);
+        doc.setLineDashPattern([], 0); doc.setLineWidth(0.2);
+        doc.setFillColor(...rgb(it.color)); doc.circle(x + 3, y + 1.8, 0.9, 'F');
+        doc.setTextColor(40); doc.text(lab, x + 8, y + 2.9);
+        x += w;
+      }
+      y += 6;
     };
 
     /* ── Kop ── */
@@ -123,7 +144,8 @@ async function makePdfReport() {
       need(ih + 18);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(17); text(c.title, M, y + 3); y += 5;
       doc.addImage(img.data, 'PNG', M, y, CW, ih, undefined, 'FAST'); y += ih + 1;
-      if (img.legend) { para(img.legend, 7.5, 110); }
+      if (img.series.length) drawLegend(img.series);
+      if (img.note) para(img.note, 7.5, 110);
       y += 3;
     }
 
