@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Winsol Klachtenanalyse</title>
+  <!-- Zelfde huisstijl als de Presentatievertaler en de Meeting Report Generator -->
+  <link rel="stylesheet" href="styles.css?v=202611021200" />
+  <style>
+    .container { max-width: 1280px; }
+    .step-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--brand); border-radius:50%; font-size:0.75rem; font-weight:700; color:#111; flex-shrink:0; }
+    .section-title { display:flex; align-items:center; gap:8px; font-size:0.95rem; font-weight:700; margin:0 0 16px; color:var(--text); }
+    .section-title .grow { flex:1; }
+    .btn-outline { padding:7px 14px; font-size:0.82rem; font-weight:600; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:border-color .15s, background .15s; }
+    .btn-outline:hover { border-color:var(--brand); background:#fffbe6; }
+    .btn-sm { padding:7px 14px; font-size:0.82rem; }
+    .field-label { display:block; font-size:0.78rem; font-weight:600; color:#555; margin-bottom:5px; }
+    .field-input { width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem; background:#fff; color:var(--text); box-sizing:border-box; font-family:inherit; }
+    .field-input:focus { outline:2px solid var(--brand); border-color:var(--brand); }
+    select.field-input { cursor:pointer; }
+    .status.err { color:#c53030; }
+    .info-banner { background:#fffbe6; border-left:4px solid var(--brand); border-radius:8px; padding:12px 14px; font-size:0.82rem; line-height:1.55; margin-bottom:12px; }
+
+    /* Data-kaart */
+    .data-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .data-info { flex:1; min-width:240px; font-size:0.85rem; color:var(--muted); }
+    .data-info b { color:var(--text); }
+    .drop-zone { border:2px dashed var(--border); border-radius:10px; padding:22px 16px; text-align:center; cursor:pointer; background:#fafafa; margin-top:12px; }
+    .drop-zone:hover, .drop-zone.drag-over { border-color:var(--brand); background:#fffbe6; }
+    .drop-zone p { font-size:0.82rem; color:var(--muted); margin:0; }
+
+    /* Filters */
+    .filter-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px 14px; }
+    @media (max-width: 1000px) { .filter-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 560px)  { .filter-grid { grid-template-columns:1fr; } }
+    .span-search { grid-column: span 2; }
+    @media (max-width: 1000px) { .span-search { grid-column: span 2; } }
+    @media (max-width: 560px) { .span-search { grid-column: auto; } }
+    .period { display:flex; gap:6px; align-items:center; }
+    .period input { min-width:0; }
+    .quick { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+    .quick button { padding:3px 9px; font-size:0.72rem; font-weight:600; border:1px solid var(--border); background:#fff; border-radius:20px; }
+    .quick button:hover, .quick button.on { background:#fffbe6; border-color:var(--brand); }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; align-items:center; min-height:26px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; background:#fffbe6; border:1px solid var(--brand); border-radius:20px; padding:3px 6px 3px 10px; font-size:0.75rem; }
+    .chip button { background:none; border:none; padding:0 4px; font-size:0.9rem; line-height:1; color:#555; }
+    .chip button:hover { background:none; color:#000; }
+    .chips .clear { margin-left:auto; }
+
+    /* Multi-select */
+    .ms { position:relative; }
+    .ms-btn { width:100%; text-align:left; background:#fff; border:1px solid var(--border); border-radius:8px; padding:8px 30px 8px 11px; font-size:0.88rem; font-weight:400; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; }
+    .ms-btn:hover { background:#fff; border-color:#bbb; }
+    .ms-btn::after { content:""; position:absolute; right:12px; top:50%; transform:translateY(-50%); border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--brand); }
+    .ms-btn.has { border-color:var(--brand); background:#fffdf2; }
+    .ms-panel { display:none; position:absolute; z-index:50; top:calc(100% + 4px); left:0; width:max(100%, 340px); max-width:90vw; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.12); padding:8px; }
+    .ms.open .ms-panel { display:block; }
+    .filter-grid > div:nth-child(4n) .ms-panel { left:auto; right:0; }
+    .ms-panel input[type=search] { width:100%; box-sizing:border-box; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.85rem; margin-bottom:6px; }
+    .ms-list { max-height:280px; overflow:auto; }
+    .ms-item { display:flex; align-items:flex-start; gap:8px; padding:5px 6px; border-radius:6px; font-size:0.82rem; cursor:pointer; }
+    .ms-item:hover { background:#f5f5f5; }
+    .ms-item input { margin:2px 0 0; accent-color:#111; flex-shrink:0; }
+    .ms-item .lbl { flex:1; min-width:0; }
+    .ms-item .cnt { color:var(--muted); font-size:0.72rem; }
+    .ms-item.lvl2 { padding-left:22px; } .ms-item.lvl3 { padding-left:38px; } .ms-item.lvl4 { padding-left:54px; color:#444; }
+    .ms-foot { display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); margin-top:6px; padding-top:6px; font-size:0.75rem; color:var(--muted); }
+    .ms-foot button { padding:3px 10px; font-size:0.75rem; }
+    .ms-acts { display:flex; gap:6px; }
+    .ms-presets { display:flex; gap:6px; border-top:1px solid var(--border); margin-top:6px; padding-top:6px; }
+    .ms-presets button { flex:1; padding:4px 8px; font-size:0.75rem; }
+    .chip.link { cursor:pointer; }
+    .chip.link:hover { background:#fff3b0; }
+
+    /* KPI */
+    .stat-row { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:0 0 12px; }
+    @media (max-width: 900px) { .stat-row { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+    .stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+    .stat b { display:block; font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .stat span { font-size:0.75rem; color:var(--muted); }
+    .stat b small { font-size:0.95rem; font-weight:600; color:var(--muted); margin-left:6px; }
+    .dos-list { display:flex; flex-direction:column; gap:4px; margin:4px 0 12px; }
+    .dos-item { display:grid; grid-template-columns:90px 92px 110px 1fr; gap:10px; align-items:center; padding:6px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.8rem; cursor:pointer; }
+    .dos-item:hover { background:#fffbe6; border-color:var(--brand); }
+    .dos-group { margin:0 0 8px; padding-left:8px; display:flex; flex-direction:column; gap:4px; }
+    .dos-head { font-size:0.75rem; font-weight:700; color:#555; margin:2px 0; }
+    .dos-item.cur { background:#fffbe6; border-color:var(--brand); font-weight:600; }
+    .dos-item .act { font-weight:600; }
+    .dos-item .txt { color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* Grafiek */
+    .chart-ctrl { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:12px; }
+    .chart-ctrl > div { min-width:150px; }
+    .seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .seg button { border:none; border-radius:0; background:#fff; padding:7px 12px; font-size:0.8rem; font-weight:600; }
+    .seg button + button { border-left:1px solid var(--border); }
+    .seg button.on { background:var(--brand); }
+    .chart-ctrl [hidden] { display:none; }
+    .chart-box { position:relative; height:340px; }
+    .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:0.78rem; color:#444; }
+    .legend span { display:inline-flex; align-items:center; gap:6px; }
+    .legend i { width:12px; height:4px; border-radius:2px; display:inline-block; }
+    .legend label.yr { display:inline-flex; align-items:center; gap:6px; cursor:pointer; padding:2px 8px 2px 4px; border-radius:6px; user-select:none; }
+    .legend label.yr:hover { background:#f5f5f5; }
+    .legend label.yr input { margin:0; accent-color:#111; }
+    .legend label.yr.off { color:#9ca3af; }
+    .legend label.yr.off i { opacity:.3; }
+    .legend .yr-lbl { font-weight:600; color:#555; }
+    .legend .yr-q { padding:2px 9px; font-size:0.72rem; font-weight:600; border:1px solid var(--border); background:#fff; border-radius:20px; }
+    .legend .yr-q:hover { background:#fffbe6; border-color:var(--brand); }
+
+    /* Top-lijsten */
+    .tops { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+    @media (max-width: 900px) { .tops { grid-template-columns:1fr; } }
+    .top-card h3 { font-size:0.88rem; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+    .top-card h3 .grow { flex:1; }
+    .top-card select { padding:4px 8px; font-size:0.75rem; border:1px solid var(--border); border-radius:6px; background:#fff; }
+    .bars { display:flex; flex-direction:column; gap:4px; }
+    .bar-row { display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:8px; align-items:center; padding:3px 4px; border-radius:6px; cursor:pointer; }
+    .bar-row:hover { background:#fffbe6; }
+    .bar-lbl { font-size:0.78rem; position:relative; z-index:1; padding:3px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bar-track { position:relative; }
+    .bar-fill { position:absolute; left:0; top:0; bottom:0; background:#cfe0f6; border-radius:0 4px 4px 0; }
+    .bar-val { font-size:0.78rem; text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; color:#333; }
+    .empty { font-size:0.82rem; color:var(--muted); padding:8px 0; }
+
+    /* Tabel */
+    .tbl-wrap { overflow:auto; border:1px solid var(--border); border-radius:10px; }
+    table.kl { width:100%; border-collapse:collapse; font-size:0.8rem; }
+    table.kl th { position:sticky; top:0; background:#fafafa; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; font-weight:700; }
+    table.kl th.num, table.kl td.num { text-align:right; }
+    table.kl th .arr { color:var(--muted); font-size:0.7rem; }
+    table.kl td { padding:7px 10px; white-space:nowrap; border-bottom:1px solid #f0f0f2; vertical-align:top; }
+    table.kl tr:hover td { background:#fffbe6; cursor:pointer; }
+    td.clip { max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pill { border-radius:20px; padding:2px 8px; font-size:0.7rem; font-weight:700; white-space:nowrap; }
+    .pill.open { background:#fbecd5; color:#8a5200; }
+    .pill.closed { background:#eef0f2; color:#4b5563; }
+    .pager { display:flex; align-items:center; gap:8px; justify-content:flex-end; margin-top:10px; font-size:0.8rem; color:var(--muted); }
+
+    /* Detail */
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:flex-start; justify-content:center; z-index:200; padding:40px 16px; overflow:auto; }
+    .modal-bg.open { display:flex; }
+    .modal { background:#fff; border-radius:14px; max-width:860px; width:100%; padding:22px 24px; box-shadow:0 10px 40px rgba(0,0,0,.2); }
+    .modal h2 { margin:0 0 4px; font-size:1.15rem; }
+    .modal .sub { color:var(--muted); font-size:0.82rem; margin-bottom:16px; }
+    .dl { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px 18px; margin-bottom:14px; }
+    @media (max-width: 640px) { .dl { grid-template-columns:1fr 1fr; } }
+    .dl div span { display:block; font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+    .dl div b { font-size:0.85rem; font-weight:600; }
+    .txt-block { background:#fafafa; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:0.84rem; white-space:pre-wrap; margin:4px 0 12px; }
+    .modal h4 { margin:10px 0 2px; font-size:0.82rem; }
+    .tree-path { display:inline-block; background:#fffbe6; border:1px solid var(--brand); border-radius:20px; padding:3px 10px; font-size:0.78rem; margin:2px 4px 2px 0; }
+
+    /* Info-knoppen */
+    .ibtn { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; margin-left:6px; padding:0; border-radius:50%; border:1px solid #c9ccd1; background:#fff; color:#6b7280; font:italic 700 10px/1 Georgia, serif; vertical-align:1px; cursor:pointer; }
+    .ibtn:hover, .ibtn.on { background:var(--brand); border-color:var(--brand); color:#111; }
+    .stat .ibtn { vertical-align:0; }
+    #infoPop { position:absolute; z-index:400; display:none; width:min(440px, calc(100vw - 32px)); background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 36px rgba(0,0,0,.16); padding:14px 16px; font-size:0.82rem; line-height:1.5; color:var(--text); }
+    #infoPop.open { display:block; }
+    #infoPop h4 { margin:0 0 6px; font-size:0.92rem; display:flex; align-items:center; gap:8px; }
+    #infoPop h4 .x { margin-left:auto; background:none; border:none; padding:0 4px; font-size:1.1rem; color:#6b7280; }
+    #infoPop p { margin:0 0 8px; }
+    #infoPop .lbl { display:block; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; margin:10px 0 3px; }
+    #infoPop code { background:#f3f4f6; border-radius:4px; padding:1px 5px; font-size:0.76rem; }
+    #infoPop ul { margin:0; padding-left:18px; }
+    #infoPop .warn { background:#fffbe6; border-left:3px solid var(--brand); padding:6px 9px; border-radius:6px; margin-top:8px; }
+    .help-modal h3 { font-size:0.95rem; margin:18px 0 6px; }
+    .help-modal table { width:100%; border-collapse:collapse; font-size:0.8rem; }
+    .help-modal td, .help-modal th { border-bottom:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+    .help-modal code { background:#f3f4f6; border-radius:4px; padding:1px 5px; font-size:0.76rem; }
+    .flow { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:0.8rem; }
+    .flow .box { border:1px solid var(--border); border-radius:10px; padding:8px 12px; background:#fafafa; }
+    .flow .arr { color:#9ca3af; }
+    #loading { position:fixed; inset:0; background:rgba(247,247,248,.85); display:none; align-items:center; justify-content:center; z-index:300; flex-direction:column; gap:12px; font-size:0.9rem; }
+    #loading.on { display:flex; }
+    .spinner { width:34px; height:34px; border:4px solid #eee; border-top-color:var(--brand); border-radius:50%; animation:spin 0.9s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    #main[hidden] { display:none; }
+    /* Taalkeuze, topbar en login — identiek aan de Presentatievertaler / Meeting Report Generator */
+    .language-box { display:flex; align-items:center; gap:8px; }
+    .lang-icon { width:20px; height:20px; fill:var(--muted); flex-shrink:0; }
+    .language-wrapper { position:relative; display:inline-block; }
+    .language-wrapper select { appearance:none; -webkit-appearance:none; font-family:inherit; font-size:13px; padding:6px 32px 6px 12px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); height:32px; cursor:pointer; }
+    .language-wrapper select:hover { border-color:var(--muted); }
+    .language-wrapper select:focus { outline:2px solid var(--brand); outline-offset:1px; }
+    .language-wrapper::after { content:""; position:absolute; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--muted); }
+    .login-lang { justify-content:center; margin-top:18px; }
+    .btn-dark { background:#2f3638; color:#fff; border:none; border-radius:8px; padding:6px 14px; font-family:inherit; font-weight:700; font-size:12px; cursor:pointer; }
+    .btn-dark:hover { background:#23292b; }
+    #loginScreen { min-height:100vh; display:none; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+    .login-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 28px; max-width:360px; width:100%; text-align:center; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    .login-card .login-logo { width:56px; height:56px; margin-bottom:12px; }
+    .login-card h1 { font-size:20px; margin:0 0 4px; color:var(--text); }
+    .login-card .login-sub { color:var(--muted); font-size:13px; margin:0 0 20px; }
+    .login-form { display:flex; flex-direction:column; gap:12px; text-align:left; }
+    .login-form input[type=text], .login-form input[type=password] { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:9px; padding:10px 12px; font-family:inherit; font-size:14px; background:#f7f7f8; color:var(--text); }
+    .login-form input:focus { outline:2px solid var(--brand); outline-offset:1px; }
+    .login-pw-wrap { position:relative; }
+    .login-pw-wrap input { padding-right:38px !important; }
+    .login-pw-eye { position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px; }
+    .login-remember { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); cursor:pointer; }
+    .login-remember input { margin:0; }
+    .login-btn { width:100%; }
+    .login-error { color:#c00; font-size:13px; min-height:16px; }
+    #appRoot { display:none; }
+    .topbar { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:10px; max-width:1280px; margin:0 auto; padding:16px 20px 0; font-size:13px; color:var(--muted); }
+    .topbar .language-box { margin-right:auto; }
+    .topbar b { color:var(--text); }
+    .status.ok { color:#16a34a; }
+    .admin-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+    .part-sub { font-size:0.8rem; color:var(--muted); margin:0 0 12px; line-height:1.5; }
+    .drop-zone.has-file { border-color:#22c55e; background:#f0fdf4; }
+    .user-tbl { width:100%; border-collapse:collapse; font-size:0.8rem; margin-top:10px; }
+    .user-tbl td, .user-tbl th { border-bottom:1px solid #eee; padding:5px 8px; text-align:left; }
+  </style>
+</head>
+<body>
+<div id="loginScreen">
+  <div class="login-card">
+    <img src="Winsol_Avatar_150px.png" class="login-logo" alt="Winsol" onerror="this.style.display='none'">
+    <h1 data-i18n="appTitle">Klachtenanalyse</h1>
+    <p class="login-sub" data-i18n="loginSub">Log in om verder te gaan.</p>
+    <div class="login-form">
+      <input type="text" id="loginUsername" data-i18n-placeholder="username" placeholder="Gebruikersnaam" autocomplete="username">
+      <div class="login-pw-wrap">
+        <input type="password" id="loginPassword" data-i18n-placeholder="password" placeholder="Wachtwoord" autocomplete="current-password">
+        <button type="button" id="loginPwToggle" class="login-pw-eye" data-i18n-title="pwToggle" title="Wachtwoord tonen/verbergen" tabindex="-1">&#128065;</button>
+      </div>
+      <label class="login-remember"><input type="checkbox" id="loginRemember"><span data-i18n="remember">Blijf aangemeld</span></label>
+      <button class="login-btn" id="loginSubmitBtn" type="button" data-i18n="loginBtn">Aanmelden</button>
+      <div class="login-error" id="loginError"></div>
+    </div>
+    <div class="language-box login-lang">
+      <svg class="lang-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm7.93 9h-3.05a15.1 15.1 0 00-1.12-5.18 8.03 8.03 0 014.17 5.18zM12 4c.88 1.14 1.57 2.71 1.97 4.5H10.03C10.43 6.71 11.12 5.14 12 4zm-3.76.82A15.1 15.1 0 006.12 11H3.07a8.03 8.03 0 015.17-6.18zM3.07 13h3.05a15.1 15.1 0 001.12 5.18A8.03 8.03 0 013.07 13zm8.93 7c-.88-1.14-1.57-2.71-1.97-4.5h3.94c-.4 1.79-1.09 3.36-1.97 4.5zm3.76-.82a15.1 15.1 0 001.12-5.18h3.05a8.03 8.03 0 01-4.17 5.18z"/></svg>
+      <div class="language-wrapper"><select id="uiLangLogin" class="ui-lang" data-i18n-title="uiLanguage"></select></div>
+    </div>
+  </div>
+</div>
+
+<div id="appRoot">
+<div class="topbar" id="topbar">
+  <div class="language-box">
+    <svg class="lang-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm7.93 9h-3.05a15.1 15.1 0 00-1.12-5.18 8.03 8.03 0 014.17 5.18zM12 4c.88 1.14 1.57 2.71 1.97 4.5H10.03C10.43 6.71 11.12 5.14 12 4zm-3.76.82A15.1 15.1 0 006.12 11H3.07a8.03 8.03 0 015.17-6.18zM3.07 13h3.05a15.1 15.1 0 001.12 5.18A8.03 8.03 0 013.07 13zm8.93 7c-.88-1.14-1.57-2.71-1.97-4.5h3.94c-.4 1.79-1.09 3.36-1.97 4.5zm3.76-.82a15.1 15.1 0 001.12-5.18h3.05a8.03 8.03 0 01-4.17 5.18z"/></svg>
+    <div class="language-wrapper"><select id="uiLangApp" class="ui-lang" data-i18n-title="uiLanguage"></select></div>
+  </div>
+  <span><span data-i18n="loggedInAs">Ingelogd als</span> <b id="topbarUser"></b> (<span id="topbarRole"></span>)</span>
+  <button class="btn-dark" id="logoutBtn" type="button" data-i18n="logout">Uitloggen</button>
+</div>
+<div class="container">
+
+  <div class="hero">
+    <div><h1 class="hero__title" data-i18n="appTitle">Klachtenanalyse</h1></div>
+    <img src="Winsol_Avatar_150px.png" class="hero__logo" alt="Winsol" />
+  </div>
+
+  <!-- DATA -->
+  <div class="ts-card">
+    <div class="data-row">
+      <div class="data-info" id="dataInfo"></div>
+      <button class="btn-outline" id="helpBtn" type="button" data-i18n="helpBtn">? Uitleg data</button>
+      <button id="reloadBtn" type="button" class="btn-sm" data-i18n="reloadBtn">Data vernieuwen</button>
+    </div>
+    <p class="status" id="dataStatus"></p>
+  </div>
+
+  <div id="main" hidden>
+    <!-- FILTERS -->
+    <div class="ts-card">
+      <h2 class="section-title"><span class="step-badge">1</span><span data-info="filters">Filters</span></h2>
+      <div class="filter-grid">
+        <div>
+          <label class="field-label" data-info="periode">Periode (datum klacht)</label>
+          <div class="period">
+            <input type="date" class="field-input" id="dFrom"><span>–</span><input type="date" class="field-input" id="dTo">
+          </div>
+          <div class="quick" id="quick">
+            <button type="button" data-q="12">12 mnd</button>
+            <button type="button" data-q="24">24 mnd</button>
+            <button type="button" data-q="ytd">Dit jaar</button>
+            <button type="button" data-q="all">Alles</button>
+          </div>
+        </div>
+        <div><label class="field-label" data-info="pg">Productgroep</label><div class="ms" id="f_pg"></div></div>
+        <div><label class="field-label" data-info="prod">Product</label><div class="ms" id="f_prod"></div></div>
+        <div><label class="field-label" data-info="tree">TREE (defect)</label><div class="ms" id="f_tree"></div></div>
+        <div><label class="field-label" data-info="ntr">NTR-code</label><div class="ms" id="f_ntr"></div></div>
+        <div><label class="field-label" data-info="fout">Foutcode</label><div class="ms" id="f_fout"></div></div>
+        <div><label class="field-label" data-info="klant">Klant</label><div class="ms" id="f_klant"></div></div>
+        <div><label class="field-label" data-info="status">Status</label><div class="ms" id="f_status"></div></div>
+        <div><label class="field-label" data-info="vert">Vertegenwoordiger</label><div class="ms" id="f_vert"></div></div>
+        <div><label class="field-label" data-info="regio">Regio</label><div class="ms" id="f_regio"></div></div>
+        <div>
+          <label class="field-label" data-info="open">Open / afgesloten</label>
+          <select class="field-input" id="fOpen"><option value="">Alle</option><option value="open">Enkel open</option><option value="closed">Enkel afgesloten</option></select>
+        </div>
+        <div>
+          <label class="field-label" data-info="terinfo">Klachten “ter info”</label>
+          <select class="field-input" id="fInfo"><option value="excl">Niet meetellen</option><option value="incl">Meetellen</option><option value="only">Enkel “ter info”</option></select>
+        </div>
+        <div><label class="field-label" data-info="actie">Uit te voeren actie</label><div class="ms" id="f_actie"></div></div>
+        <div>
+          <label class="field-label" data-info="vervolg">Vervolg</label>
+          <select class="field-input" id="fVervolg"><option value="">Alle klachten</option><option value="first">Enkel eerste klacht op het order</option><option value="vervolg">Enkel vervolgklachten</option><option value="ander">Enkel andere klacht op hetzelfde order</option></select>
+        </div>
+        <div class="span-search">
+          <label class="field-label" data-info="zoek">Zoekterm (omschrijving, oplossing, oorzaak)</label>
+          <input type="search" class="field-input" id="fText" placeholder="bv. motor, lamel, kleur…">
+        </div>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <!-- KPI -->
+    <div class="stat-row">
+      <div class="stat"><b id="kTotal">–</b><span data-info="kTotal">Klachten</span></div>
+      <div class="stat"><b id="kOpen">–</b><span data-info="kOpen">Open</span></div>
+      <div class="stat"><b id="kCost">–</b><span data-info="kCost">NTR-kost (materiaal + plaatsing)</span></div>
+      <div class="stat"><b id="kLead">–</b><span data-info="kLead">Gem. doorlooptijd tot afsluiten (dagen)</span></div>
+      <div class="stat"><b id="kTree">–</b><span data-info="kTree">Met TREE ingevuld</span></div>
+      <div class="stat new"><b id="kDos">–</b><span data-info="kDos">Dossiers</span></div>
+      <div class="stat new"><b id="kInterv">–</b><span data-info="kInterv">Met interventie</span></div>
+      <div class="stat new"><b id="kVervolg">–</b><span data-info="kVervolg">Vervolgklachten (zelfde probleem)</span></div>
+      <div class="stat new"><b id="kAnder">–</b><span data-info="kAnder">Andere klacht op hetzelfde order</span></div>
+    </div>
+
+    <!-- EVOLUTIE -->
+    <div class="ts-card">
+      <h2 class="section-title"><span class="step-badge">2</span><span data-info="evolutie">Evolutie</span></h2>
+      <div class="chart-ctrl">
+        <div>
+          <label class="field-label" data-info="mode">Grafiek</label>
+          <div class="seg" id="segMode"><button data-v="time" class="on">Tijdlijn</button><button data-v="cumul">Jaren cumulatief</button><button data-v="qual">Interventie &amp; vervolg</button></div>
+        </div>
+        <div data-modes="time qual">
+          <label class="field-label">Per</label>
+          <div class="seg" id="segGran"><button data-v="M" class="on">Maand</button><button data-v="Q">Kwartaal</button><button data-v="Y">Jaar</button></div>
+        </div>
+        <div data-modes="time cumul">
+          <label class="field-label">Maat</label>
+          <div class="seg" id="segMeasure"><button data-v="n" class="on">Aantal</button><button data-v="cost">NTR-kost</button></div>
+        </div>
+        <div data-modes="cumul" hidden>
+          <label class="field-label">Per</label>
+          <div class="seg" id="segCumGran"><button data-v="W" class="on">Week</button><button data-v="M">Maand</button></div>
+        </div>
+        <div class="only-cumul" hidden>
+          <label class="field-label" data-info="target">Doel huidig jaar</label>
+          <select class="field-input" id="targetPct">
+            <option value="">Geen doellijn</option>
+            <option value="-10">−10% t.o.v. vorig jaar</option>
+            <option value="-20">−20% t.o.v. vorig jaar</option>
+            <option value="-30">−30% t.o.v. vorig jaar</option>
+            <option value="-50">−50% t.o.v. vorig jaar</option>
+          </select>
+        </div>
+        <div data-modes="time">
+          <label class="field-label" data-info="split">Uitsplitsen op</label>
+          <select class="field-input" id="splitBy">
+            <option value="">Geen (totaal)</option>
+            <option value="pg">Productgroep</option>
+            <option value="prod">Product</option>
+            <option value="t1">TREE niveau 1</option>
+            <option value="t2">TREE niveau 2</option>
+            <option value="t3">TREE niveau 3</option>
+            <option value="ntr">NTR-code</option>
+            <option value="klant">Klant</option>
+            <option value="status">Open / afgesloten</option>
+            <option value="actie">Uit te voeren actie</option>
+            <option value="vervolg">Eerste klacht / vervolgklacht</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="trend"></canvas></div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- TOP -->
+    <div class="ts-card">
+      <h2 class="section-title"><span class="step-badge">3</span><span data-info="top">Waar zitten de klachten?</span><span class="grow"></span><span class="status" style="margin:0">Klik op een balk om erop te filteren.</span></h2>
+      <div class="tops">
+        <div class="top-card">
+          <h3>TREE <span class="grow"></span>
+            <select id="treeLevel"><option value="3">niveau 3</option><option value="2">niveau 2</option><option value="4">volledig pad</option></select>
+          </h3>
+          <div class="bars" id="topTree"></div>
+        </div>
+        <div class="top-card"><h3>Producten</h3><div class="bars" id="topProd"></div></div>
+        <div class="top-card"><h3>NTR-codes</h3><div class="bars" id="topNtr"></div></div>
+        <div class="top-card"><h3>Klanten</h3><div class="bars" id="topKlant"></div></div>
+      </div>
+    </div>
+
+    <!-- LIJST -->
+    <div class="ts-card">
+      <h2 class="section-title"><span class="step-badge">4</span><span data-info="lijst">Klachten</span><span class="grow"></span>
+        <button class="btn-outline" id="exportBtn" type="button">Exporteren naar Excel</button>
+      </h2>
+      <div class="tbl-wrap"><table class="kl" id="tbl"></table></div>
+      <div class="pager" id="pager"></div>
+    </div>
+  </div>
+
+  <!-- ══ ADMIN: KLACHTENDATA ══ -->
+  <div class="ts-card" id="adminDataCard" hidden>
+    <h2 class="section-title" data-i18n="adminDataTitle">Klachtendata opladen</h2>
+    <p class="part-sub" data-i18n-html="adminDataSub"></p>
+    <p class="status" id="lastUpload" style="margin:0 0 10px"></p>
+    <div class="drop-zone" id="dataDrop"><p data-i18n-html="dropData"></p></div>
+    <input type="file" id="dataFile" accept=".xlsx,.xlsm" hidden>
+    <p class="status" id="diffStatus"></p>
+    <div class="admin-actions"><button id="uploadBtn" class="primary" type="button" disabled data-i18n="uploadBtn">Opladen</button></div>
+  </div>
+
+  <!-- ══ ADMIN: GEBRUIKERS ══ -->
+  <div class="ts-card" id="usersCard" hidden>
+    <h2 class="section-title" data-i18n="usersTitle">Gebruikers beheren</h2>
+    <p class="part-sub" data-i18n="usersSub"></p>
+    <div class="drop-zone" id="usersDrop"><p data-i18n-html="dropUsers"></p></div>
+    <input type="file" id="usersFile" accept=".xlsx,.xls,.csv" hidden>
+    <div class="admin-actions">
+      <button id="usersUpdateBtn" class="primary" type="button" disabled data-i18n="usersUpdateBtn">Gebruikers bijwerken</button>
+      <button id="usersListBtn" class="btn-outline" type="button" data-i18n="usersListBtn">Huidige gebruikers tonen</button>
+    </div>
+    <p class="status" id="usersStatus"></p>
+    <div id="usersList"></div>
+  </div>
+</div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="loading"><div class="spinner"></div><div id="loadingTxt">Data inlezen…</div></div>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/chart.umd.js"></script>
+<script src="i18n.js?v=202611021200"></script>
+<script src="app.js?v=202611021200"></script>
+<script src="info.js?v=202611021200"></script>
+</body>
+</html>

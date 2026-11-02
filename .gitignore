@@ -1,0 +1,18 @@
+node_modules/
+.wrangler/
+.env
+*.local
+.dev.vars
+*.secret.json
+admin.json
+
+# Data en gebruikerslijsten (met wachtwoorden) nooit online
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+
+# Documentatie (bevat account- en beveiligingsinfo en de AS400-queries) niet online
+README.md
+DATA_OPHALEN.md
+PEPPER.txt

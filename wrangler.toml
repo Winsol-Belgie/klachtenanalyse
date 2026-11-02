@@ -1,0 +1,13 @@
+name = "klachtenanalyse"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# Wordt aangemaakt met: npx wrangler kv namespace create KLACHTEN_KV
+# Vervang REPLACE_WITH_KV_ID hieronder door de "id" die dat commando teruggeeft.
+[[kv_namespaces]]
+binding = "KLACHTEN_KV"
+id = "98c6f80222d64f90af2b1180f3c59bef"
+
+# Optioneel: ander adres van de webpagina (standaard https://winsol-belgie.github.io)
+# [vars]
+# ALLOWED_ORIGIN = "https://winsol-belgie.github.io"
