@@ -38,7 +38,7 @@ const I18N = {
     uploadBtn: 'Opladen', uploading: 'Opladen… ({done}/{total})', uploadDone: 'Opgeladen: {n} klachten online ({new} nieuw, {changed} gewijzigd, {removed} verwijderd).',
     uploadError: 'Opladen mislukt: {msg}',
     lastUpload: 'Laatste upload: {date} door {by} ({file}) · {new} nieuw, {changed} gewijzigd, {removed} verwijderd.',
-    usersTitle: 'Gebruikers beheren', usersSub: 'Excel met kolommen USER, PW, ROLE (admin, user, sales, dir of delete), VTNR (VT-nummer(s), gescheiden door ; — verplicht voor sales en dir) en Regio. Gebruikers die niet in het bestand staan, blijven ongewijzigd.',
+    usersTitle: 'Gebruikers beheren', usersSub: 'Excel met kolommen USER, PW, ROLE (admin, user, sales, dir of delete), VTNR (VT-nummer(s), gescheiden door ; — verplicht voor sales en dir) en Regio. Een dir ziet zijn eigen VT-nummer(s) plus die van alle sales- en dir-gebruikers met dezelfde Regio. Gebruikers die niet in het bestand staan, blijven ongewijzigd.',
     dropUsers: '<b>Sleep de gebruikers-Excel hierheen</b> of klik om te kiezen.', usersUpdateBtn: 'Gebruikers bijwerken',
     usersDone: '{updated} bijgewerkt, {deleted} verwijderd.', usersNoRows: 'Geen gebruikers gevonden. Verwacht kolommen USER, PW, ROLE (en VTNR, Regio).',
     usersListBtn: 'Huidige gebruikers tonen',

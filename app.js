@@ -559,7 +559,7 @@ async function doUsers() {
 async function listUsers() {
   const { ok, status, data } = await apiRequest({ mode: 'admin_list_users' });
   if (handleAuthFailure(status) || !ok) return;
-  $('usersList').innerHTML = `<table class="user-tbl"><tr><th>USER</th><th>ROLE</th><th>VTNR</th><th>Regio</th></tr>${data.users.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc((u.vts || []).join('; '))}</td><td>${esc(u.regio || '')}</td></tr>`).join('')}</table>`;
+  $('usersList').innerHTML = `<table class="user-tbl"><tr><th>USER</th><th>ROLE</th><th>VTNR</th><th>Regio</th></tr>${data.users.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc((u.ownVts || u.vts || []).join('; '))}${u.role === 'dir' ? ` <span style="color:var(--muted)">(ziet: ${esc((u.vts || []).join('; '))})</span>` : ''}</td><td>${esc(u.regio || '')}</td></tr>`).join('')}</table>`;
 }
 
 /* ───────────── Productgroep-sets (codes uit PFPRODGRO) ─────────────

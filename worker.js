@@ -14,7 +14,7 @@
 //   - de Worker de data nooit hoeft te ontleden (weinig rekentijd, gratis plan volstaat).
 //
 // KV-sleutels:
-//   user:<username>     -> { username, passwordHash, role, vts:[..], regio }
+//   user:<username>     -> { username, passwordHash, role, vts:[..], regio, vtsEff:[..] (enkel dir) }
 //   session:<token>     -> { username }                       (met vervaldatum)
 //   fail:user:<naam> / fail:ip:<ip>                           (login-blokkering)
 //   data:meta           -> { version, uploadedAt, uploadedBy, fileName, fileDate,
@@ -207,8 +207,37 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
+// vts = de VT-nummers die de gebruiker mag zien. Voor een dir is dat zijn eigen
+// nummer(s) + die van alle sales/dir-gebruikers met dezelfde regio (berekend bij
+// het opladen van de gebruikers-Excel, zie recomputeDirScopes).
 function publicUser(u) {
-  return { username: u.username, role: u.role, vts: u.vts || [], regio: u.regio || '' };
+  return { username: u.username, role: u.role, vts: (u.role === 'dir' && u.vtsEff) || u.vts || [], ownVts: u.vts || [], regio: u.regio || '' };
+}
+
+async function allUsers(env) {
+  const out = [];
+  let cursor;
+  do {
+    const page = await env.KLACHTEN_KV.list({ prefix: 'user:', cursor });
+    for (const k of page.keys) { const u = await env.KLACHTEN_KV.get(k.name, 'json'); if (u) out.push(u); }
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  return out;
+}
+
+async function recomputeDirScopes(env) {
+  const users = await allUsers(env);
+  const norm = (r) => String(r || '').trim().toUpperCase();
+  for (const d of users.filter((u) => u.role === 'dir')) {
+    const reg = norm(d.regio);
+    const set = new Set(d.vts || []);
+    if (reg) for (const u of users) if (SCOPED_ROLES.includes(u.role) && norm(u.regio) === reg) for (const v of u.vts || []) set.add(v);
+    const eff = [...set].sort((a, b) => Number(a) - Number(b));
+    if (JSON.stringify(eff) !== JSON.stringify(d.vtsEff || [])) {
+      d.vtsEff = eff;
+      await env.KLACHTEN_KV.put(`user:${d.username}`, JSON.stringify(d));
+    }
+  }
 }
 
 async function getSession(request, env) {
@@ -266,7 +295,8 @@ async function handleLogout(request, env) {
 
 // Admin laadt de gebruikers-Excel op. Kolommen: USER, PW, ROLE, VTNR, Regio.
 //   ROLE admin / user   -> ziet alle data (admin kan ook opladen)
-//   ROLE sales / dir    -> ziet enkel klachten van de VT-nummers in VTNR (bv. "525" of "525;755")
+//   ROLE sales          -> ziet enkel klachten van de VT-nummers in VTNR (bv. "525" of "525;755")
+//   ROLE dir            -> idem + de VT-nummers van alle sales/dir-gebruikers met dezelfde Regio
 //   ROLE delete         -> gebruiker verwijderen
 // Gebruikers die niet in het bestand staan, blijven ongewijzigd.
 async function handleAdminUpsertUsers(body, env, session) {
@@ -297,20 +327,12 @@ async function handleAdminUpsertUsers(body, env, session) {
     await env.KLACHTEN_KV.put(`user:${username}`, JSON.stringify({ username, passwordHash, role, vts: SCOPED_ROLES.includes(role) ? vts : [], regio }));
     updated++;
   }
+  await recomputeDirScopes(env);
   return jsonResponse({ updated, deleted, total: users.length, errors });
 }
 
 async function handleListUsers(env) {
-  const out = [];
-  let cursor;
-  do {
-    const page = await env.KLACHTEN_KV.list({ prefix: 'user:', cursor });
-    for (const k of page.keys) {
-      const u = await env.KLACHTEN_KV.get(k.name, 'json');
-      if (u) out.push(publicUser(u));
-    }
-    cursor = page.list_complete ? null : page.cursor;
-  } while (cursor);
+  const out = (await allUsers(env)).map(publicUser);
   return jsonResponse({ users: out.sort((a, b) => a.username.localeCompare(b.username)) });
 }
 
