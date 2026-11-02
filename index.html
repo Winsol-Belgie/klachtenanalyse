@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Winsol Klachtenanalyse</title>
   <!-- Zelfde huisstijl als de Presentatievertaler en de Meeting Report Generator -->
-  <link rel="stylesheet" href="styles.css?v=202611021800" />
+  <link rel="stylesheet" href="styles.css?v=202611031000" />
   <style>
     .container { max-width: 1280px; }
     .step-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--brand); border-radius:50%; font-size:0.75rem; font-weight:700; color:#111; flex-shrink:0; }
@@ -259,6 +259,7 @@
     <div class="data-row">
       <div class="data-info" id="dataInfo"></div>
       <button class="btn-outline" id="helpBtn" type="button" data-i18n="helpBtn">? Uitleg data</button>
+      <button class="btn-outline" id="pdfBtn" type="button" data-i18n="pdfBtn" disabled>PDF-rapport</button>
       <button id="reloadBtn" type="button" class="btn-sm" data-i18n="reloadBtn">Data vernieuwen</button>
     </div>
     <p class="status" id="dataStatus"></p>
@@ -267,45 +268,45 @@
   <div id="main" hidden>
     <!-- FILTERS -->
     <div class="ts-card">
-      <h2 class="section-title"><span class="step-badge">1</span><span data-info="filters">Filters</span></h2>
+      <h2 class="section-title"><span class="step-badge">1</span><span data-info="filters"><span data-i18n="lbl_filters">Filters</span></span></h2>
       <div class="filter-grid">
         <div>
-          <label class="field-label" data-info="periode">Periode (datum klacht)</label>
+          <label class="field-label" data-info="periode"><span data-i18n="lbl_periode">Periode (datum klacht)</span></label>
           <div class="period">
             <input type="date" class="field-input" id="dFrom"><span>–</span><input type="date" class="field-input" id="dTo">
           </div>
           <div class="quick" id="quick">
-            <button type="button" data-q="12">12 mnd</button>
-            <button type="button" data-q="24">24 mnd</button>
-            <button type="button" data-q="ytd">Dit jaar</button>
-            <button type="button" data-q="all">Alles</button>
+            <button type="button" data-q="12" data-i18n="q12">12 mnd</button>
+            <button type="button" data-q="24" data-i18n="q24">24 mnd</button>
+            <button type="button" data-q="ytd" data-i18n="qYtd">Dit jaar</button>
+            <button type="button" data-q="all" data-i18n="qAll">Alles</button>
           </div>
         </div>
-        <div><label class="field-label" data-info="pg">Productgroep</label><div class="ms" id="f_pg"></div></div>
-        <div><label class="field-label" data-info="prod">Product</label><div class="ms" id="f_prod"></div></div>
-        <div><label class="field-label" data-info="tree">TREE (defect)</label><div class="ms" id="f_tree"></div></div>
-        <div><label class="field-label" data-info="ntr">NTR-code</label><div class="ms" id="f_ntr"></div></div>
-        <div><label class="field-label" data-info="fout">Foutcode</label><div class="ms" id="f_fout"></div></div>
-        <div><label class="field-label" data-info="klant">Klant</label><div class="ms" id="f_klant"></div></div>
-        <div><label class="field-label" data-info="status">Status</label><div class="ms" id="f_status"></div></div>
-        <div><label class="field-label" data-info="vert">Vertegenwoordiger</label><div class="ms" id="f_vert"></div></div>
-        <div><label class="field-label" data-info="regio">Regio</label><div class="ms" id="f_regio"></div></div>
+        <div><label class="field-label" data-info="pg"><span data-i18n="lbl_pg">Productgroep</span></label><div class="ms" id="f_pg"></div></div>
+        <div><label class="field-label" data-info="prod"><span data-i18n="lbl_prod">Product</span></label><div class="ms" id="f_prod"></div></div>
+        <div><label class="field-label" data-info="tree"><span data-i18n="lbl_tree">TREE (defect)</span></label><div class="ms" id="f_tree"></div></div>
+        <div><label class="field-label" data-info="ntr"><span data-i18n="lbl_ntr">NTR-code</span></label><div class="ms" id="f_ntr"></div></div>
+        <div><label class="field-label" data-info="fout"><span data-i18n="lbl_fout">Foutcode</span></label><div class="ms" id="f_fout"></div></div>
+        <div><label class="field-label" data-info="klant"><span data-i18n="lbl_klant">Klant</span></label><div class="ms" id="f_klant"></div></div>
+        <div><label class="field-label" data-info="status"><span data-i18n="lbl_status">Status</span></label><div class="ms" id="f_status"></div></div>
+        <div><label class="field-label" data-info="vert"><span data-i18n="lbl_vert">Vertegenwoordiger</span></label><div class="ms" id="f_vert"></div></div>
+        <div><label class="field-label" data-info="regio"><span data-i18n="lbl_regio">Regio</span></label><div class="ms" id="f_regio"></div></div>
         <div>
-          <label class="field-label" data-info="open">Open / afgesloten</label>
-          <select class="field-input" id="fOpen"><option value="">Alle</option><option value="open">Enkel open</option><option value="closed">Enkel afgesloten</option></select>
+          <label class="field-label" data-info="open"><span data-i18n="lbl_open">Open / afgesloten</span></label>
+          <select class="field-input" id="fOpen"><option value="" data-i18n="optAll">Alle</option><option value="open" data-i18n="onlyOpen">Enkel open</option><option value="closed" data-i18n="onlyClosed">Enkel afgesloten</option></select>
         </div>
         <div>
-          <label class="field-label" data-info="terinfo">Klachten “ter info”</label>
-          <select class="field-input" id="fInfo"><option value="excl">Niet meetellen</option><option value="incl">Meetellen</option><option value="only">Enkel “ter info”</option></select>
+          <label class="field-label" data-info="terinfo"><span data-i18n="lbl_terinfo">Klachten “ter info”</span></label>
+          <select class="field-input" id="fInfo"><option value="excl" data-i18n="infoExcl">Niet meetellen</option><option value="incl" data-i18n="infoIncl">Meetellen</option><option value="only" data-i18n="infoOnly">Enkel “ter info”</option></select>
         </div>
-        <div><label class="field-label" data-info="actie">Uit te voeren actie</label><div class="ms" id="f_actie"></div></div>
+        <div><label class="field-label" data-info="actie"><span data-i18n="lbl_actie">Uit te voeren actie</span></label><div class="ms" id="f_actie"></div></div>
         <div>
-          <label class="field-label" data-info="vervolg">Vervolg</label>
-          <select class="field-input" id="fVervolg"><option value="">Alle klachten</option><option value="first">Enkel eerste klacht op het order</option><option value="vervolg">Enkel vervolgklachten</option><option value="ander">Enkel andere klacht op hetzelfde order</option></select>
+          <label class="field-label" data-info="vervolg"><span data-i18n="lbl_vervolg">Vervolg</span></label>
+          <select class="field-input" id="fVervolg"><option value="" data-i18n="vvAll">Alle klachten</option><option value="first" data-i18n="vvFirst">Enkel eerste klacht op het order</option><option value="vervolg" data-i18n="vvOnly">Enkel vervolgklachten</option><option value="ander" data-i18n="vvAnder">Enkel andere klacht op hetzelfde order</option></select>
         </div>
         <div class="span-search">
-          <label class="field-label" data-info="zoek">Zoekterm (omschrijving, oplossing, oorzaak)</label>
-          <input type="search" class="field-input" id="fText" placeholder="bv. motor, lamel, kleur…">
+          <label class="field-label" data-info="zoek"><span data-i18n="lbl_zoek">Zoekterm (omschrijving, oplossing, oorzaak)</span></label>
+          <input type="search" class="field-input" id="fText" data-i18n-placeholder="searchPh" placeholder="bv. motor, lamel, kleur…">
         </div>
       </div>
       <div class="chips" id="chips"></div>
@@ -313,61 +314,61 @@
 
     <!-- KPI -->
     <div class="stat-row">
-      <div class="stat"><b id="kTotal">–</b><span data-info="kTotal">Klachten</span></div>
-      <div class="stat"><b id="kOpen">–</b><span data-info="kOpen">Open</span></div>
-      <div class="stat"><b id="kCost">–</b><span data-info="kCost">NTR-kost (materiaal + plaatsing)</span></div>
-      <div class="stat"><b id="kLead">–</b><span data-info="kLead">Gem. doorlooptijd tot afsluiten (dagen)</span></div>
-      <div class="stat"><b id="kTree">–</b><span data-info="kTree">Met TREE ingevuld</span></div>
-      <div class="stat new"><b id="kDos">–</b><span data-info="kDos">Dossiers</span></div>
-      <div class="stat new"><b id="kInterv">–</b><span data-info="kInterv">Met interventie</span></div>
-      <div class="stat new"><b id="kVervolg">–</b><span data-info="kVervolg">Vervolgklachten (zelfde probleem)</span></div>
-      <div class="stat new"><b id="kAnder">–</b><span data-info="kAnder">Andere klacht op hetzelfde order</span></div>
+      <div class="stat"><b id="kTotal">–</b><span data-info="kTotal"><span data-i18n="lbl_kTotal">Klachten</span></span></div>
+      <div class="stat"><b id="kOpen">–</b><span data-info="kOpen"><span data-i18n="lbl_kOpen">Open</span></span></div>
+      <div class="stat"><b id="kCost">–</b><span data-info="kCost"><span data-i18n="lbl_kCost">NTR-kost (materiaal + plaatsing)</span></span></div>
+      <div class="stat"><b id="kLead">–</b><span data-info="kLead"><span data-i18n="lbl_kLead">Gem. doorlooptijd tot afsluiten (dagen)</span></span></div>
+      <div class="stat"><b id="kTree">–</b><span data-info="kTree"><span data-i18n="lbl_kTree">Met TREE ingevuld</span></span></div>
+      <div class="stat new"><b id="kDos">–</b><span data-info="kDos"><span data-i18n="lbl_kDos">Dossiers</span></span></div>
+      <div class="stat new"><b id="kInterv">–</b><span data-info="kInterv"><span data-i18n="lbl_kInterv">Met interventie</span></span></div>
+      <div class="stat new"><b id="kVervolg">–</b><span data-info="kVervolg"><span data-i18n="lbl_kVervolg">Vervolgklachten (zelfde probleem)</span></span></div>
+      <div class="stat new"><b id="kAnder">–</b><span data-info="kAnder"><span data-i18n="lbl_kAnder">Andere klacht op hetzelfde order</span></span></div>
     </div>
 
     <!-- EVOLUTIE -->
     <div class="ts-card">
-      <h2 class="section-title"><span class="step-badge">2</span><span data-info="evolutie">Evolutie</span></h2>
+      <h2 class="section-title"><span class="step-badge">2</span><span data-info="evolutie"><span data-i18n="lbl_evolutie">Evolutie</span></span></h2>
       <div class="chart-ctrl">
         <div>
-          <label class="field-label" data-info="mode">Grafiek</label>
-          <div class="seg" id="segMode"><button data-v="time" class="on">Tijdlijn</button><button data-v="cumul">Jaren cumulatief</button><button data-v="qual">Interventie &amp; vervolg</button></div>
+          <label class="field-label" data-info="mode"><span data-i18n="lbl_mode">Grafiek</span></label>
+          <div class="seg" id="segMode"><button data-v="time" class="on" data-i18n="modeTime">Tijdlijn</button><button data-v="cumul" data-i18n="modeCumul">Jaren cumulatief</button><button data-v="qual" data-i18n="modeQual">Interventie &amp; vervolg</button></div>
         </div>
         <div data-modes="time qual">
-          <label class="field-label">Per</label>
-          <div class="seg" id="segGran"><button data-v="M" class="on">Maand</button><button data-v="Q">Kwartaal</button><button data-v="Y">Jaar</button></div>
+          <label class="field-label" data-i18n="per">Per</label>
+          <div class="seg" id="segGran"><button data-v="M" class="on" data-i18n="month">Maand</button><button data-v="Q" data-i18n="quarter">Kwartaal</button><button data-v="Y" data-i18n="year">Jaar</button></div>
         </div>
         <div data-modes="time cumul">
-          <label class="field-label">Maat</label>
-          <div class="seg" id="segMeasure"><button data-v="n" class="on">Aantal</button><button data-v="cost">NTR-kost</button></div>
+          <label class="field-label" data-i18n="measure">Maat</label>
+          <div class="seg" id="segMeasure"><button data-v="n" class="on" data-i18n="count">Aantal</button><button data-v="cost" data-i18n="ntrCost">NTR-kost</button></div>
         </div>
         <div data-modes="cumul" hidden>
-          <label class="field-label">Per</label>
-          <div class="seg" id="segCumGran"><button data-v="W" class="on">Week</button><button data-v="M">Maand</button></div>
+          <label class="field-label" data-i18n="per">Per</label>
+          <div class="seg" id="segCumGran"><button data-v="W" class="on" data-i18n="week">Week</button><button data-v="M" data-i18n="month">Maand</button></div>
         </div>
         <div class="only-cumul" hidden>
-          <label class="field-label" data-info="target">Doel huidig jaar</label>
+          <label class="field-label" data-info="target"><span data-i18n="lbl_target">Doel huidig jaar</span></label>
           <select class="field-input" id="targetPct">
-            <option value="">Geen doellijn</option>
-            <option value="-10">−10% t.o.v. vorig jaar</option>
-            <option value="-20">−20% t.o.v. vorig jaar</option>
-            <option value="-30">−30% t.o.v. vorig jaar</option>
-            <option value="-50">−50% t.o.v. vorig jaar</option>
+            <option value="" data-i18n="noTarget">Geen doellijn</option>
+            <option value="-10" data-i18n="t10">−10% t.o.v. vorig jaar</option>
+            <option value="-20" data-i18n="t20">−20% t.o.v. vorig jaar</option>
+            <option value="-30" data-i18n="t30">−30% t.o.v. vorig jaar</option>
+            <option value="-50" data-i18n="t50">−50% t.o.v. vorig jaar</option>
           </select>
         </div>
         <div data-modes="time">
-          <label class="field-label" data-info="split">Uitsplitsen op</label>
+          <label class="field-label" data-info="split"><span data-i18n="lbl_split">Uitsplitsen op</span></label>
           <select class="field-input" id="splitBy">
-            <option value="">Geen (totaal)</option>
-            <option value="pg">Productgroep</option>
-            <option value="prod">Product</option>
-            <option value="t1">TREE niveau 1</option>
-            <option value="t2">TREE niveau 2</option>
-            <option value="t3">TREE niveau 3</option>
-            <option value="ntr">NTR-code</option>
-            <option value="klant">Klant</option>
-            <option value="status">Open / afgesloten</option>
-            <option value="actie">Uit te voeren actie</option>
-            <option value="vervolg">Eerste klacht / vervolgklacht</option>
+            <option value="" data-i18n="splitNone">Geen (totaal)</option>
+            <option value="pg" data-i18n="lbl_pg">Productgroep</option>
+            <option value="prod" data-i18n="lbl_prod">Product</option>
+            <option value="t1" data-i18n="tree1">TREE niveau 1</option>
+            <option value="t2" data-i18n="tree2">TREE niveau 2</option>
+            <option value="t3" data-i18n="tree3">TREE niveau 3</option>
+            <option value="ntr" data-i18n="lbl_ntr">NTR-code</option>
+            <option value="klant" data-i18n="lbl_klant">Klant</option>
+            <option value="status" data-i18n="lbl_open">Open / afgesloten</option>
+            <option value="actie" data-i18n="lbl_actie">Uit te voeren actie</option>
+            <option value="vervolg" data-i18n="splitVervolg">Eerste klacht / vervolgklacht</option>
           </select>
         </div>
       </div>
@@ -377,24 +378,24 @@
 
     <!-- TOP -->
     <div class="ts-card">
-      <h2 class="section-title"><span class="step-badge">3</span><span data-info="top">Waar zitten de klachten?</span><span class="grow"></span><span class="status" style="margin:0">Klik op een balk om erop te filteren.</span></h2>
+      <h2 class="section-title"><span class="step-badge">3</span><span data-info="top"><span data-i18n="lbl_top">Waar zitten de klachten?</span></span><span class="grow"></span><span class="status" style="margin:0" data-i18n="clickBar">Klik op een balk om erop te filteren.</span></h2>
       <div class="tops">
         <div class="top-card">
           <h3>TREE <span class="grow"></span>
-            <select id="treeLevel"><option value="3">niveau 3</option><option value="2">niveau 2</option><option value="4">volledig pad</option></select>
+            <select id="treeLevel"><option value="3" data-i18n="lvl3">niveau 3</option><option value="2" data-i18n="lvl2">niveau 2</option><option value="4" data-i18n="lvlFull">volledig pad</option></select>
           </h3>
           <div class="bars" id="topTree"></div>
         </div>
-        <div class="top-card"><h3>Producten</h3><div class="bars" id="topProd"></div></div>
-        <div class="top-card"><h3>NTR-codes</h3><div class="bars" id="topNtr"></div></div>
-        <div class="top-card"><h3>Klanten</h3><div class="bars" id="topKlant"></div></div>
+        <div class="top-card"><h3 data-i18n="topProd">Producten</h3><div class="bars" id="topProd"></div></div>
+        <div class="top-card"><h3 data-i18n="topNtr">NTR-codes</h3><div class="bars" id="topNtr"></div></div>
+        <div class="top-card"><h3 data-i18n="topKlant">Klanten</h3><div class="bars" id="topKlant"></div></div>
       </div>
     </div>
 
     <!-- LIJST -->
     <div class="ts-card">
-      <h2 class="section-title"><span class="step-badge">4</span><span data-info="lijst">Klachten</span><span class="grow"></span>
-        <button class="btn-outline" id="exportBtn" type="button">Exporteren naar Excel</button>
+      <h2 class="section-title"><span class="step-badge">4</span><span data-info="lijst"><span data-i18n="lbl_lijst">Klachten</span></span><span class="grow"></span>
+        <button class="btn-outline" id="exportBtn" type="button" data-i18n="exportBtn">Exporteren naar Excel</button>
       </h2>
       <div class="tbl-wrap"><table class="kl" id="tbl"></table></div>
       <div class="pager" id="pager"></div>
@@ -429,12 +430,15 @@
 </div>
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
-<div id="loading"><div class="spinner"></div><div id="loadingTxt">Data inlezen…</div></div>
+<div id="loading"><div class="spinner"></div><div id="loadingTxt">…</div></div>
 
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/chart.umd.js"></script>
-<script src="i18n.js?v=202611021800"></script>
-<script src="app.js?v=202611021800"></script>
-<script src="info.js?v=202611021800"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="i18n.js?v=202611031000"></script>
+<script src="app.js?v=202611031000"></script>
+<script src="info.js?v=202611031000"></script>
+<script src="info-i18n.js?v=202611031000"></script>
+<script src="report.js?v=202611031000"></script>
 </body>
 </html>

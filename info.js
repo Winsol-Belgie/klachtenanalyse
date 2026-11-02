@@ -133,7 +133,7 @@ const INFO = {
     t: 'NTR-kost (materiaal + plaatsing)',
     wat: 'De som van de kosten die op de klachten geboekt werden: het bedrag voor materiaal plus het bedrag voor plaatsing, in euro.',
     bron: ['<code>KNBDRB</code> ("bedrag fout", materiaal) + <code>KNWPL</code> ("plaatsingsbedrag") in <code>' + SRC + '</code>.', 'Dit zijn de bedragen van de bevestigde NTR-boeking (dezelfde bedragen staan per boeking in <code>OORDLIB.PFKLACHTNT</code>).'],
-    let: 'Bedragen boven € 100.000 of negatieve bedragen tellen niet mee: dat zijn invoerfouten (bv. een ordernummer dat in het bedragveld getypt werd). Of de bedragen met of zonder btw zijn, is nog na te vragen bij Controlling.',
+    let: 'De bedragen zijn exclusief btw. Bedragen boven € 100.000 of negatieve bedragen tellen niet mee: dat zijn invoerfouten (bv. een ordernummer dat in het bedragveld getypt werd).',
   },
   kLead: {
     t: 'Gemiddelde doorlooptijd tot afsluiten',
@@ -189,12 +189,17 @@ pop.id = 'infoPop'; pop.setAttribute('role', 'dialog');
 document.body.appendChild(pop);
 let popBtn = null;
 
+// Tekst in de gekozen taal (info-i18n.js), anders Nederlands.
+function infoOf(key) {
+  const tr = typeof INFO_TR !== 'undefined' && INFO_TR[currentUiLang()];
+  return (tr && tr[key]) || INFO[key];
+}
 function renderInfo(key) {
-  const i = INFO[key];
-  return `<h4>${i.t}<button type="button" class="x" aria-label="Sluiten">×</button></h4>
+  const i = infoOf(key);
+  return `<h4>${i.t}<button type="button" class="x" aria-label="${t('close')}">×</button></h4>
     <p>${i.wat}</p>
-    ${i.bron ? `<span class="lbl">Bron</span><ul>${i.bron.map((b) => `<li>${b}</li>`).join('')}</ul>` : ''}
-    ${i.let ? `<div class="warn"><b>Let op:</b> ${i.let}</div>` : ''}`;
+    ${i.bron ? `<span class="lbl">${t('infoSrc')}</span><ul>${i.bron.map((b) => `<li>${b}</li>`).join('')}</ul>` : ''}
+    ${i.let ? `<div class="warn"><b>${t('infoNote')}</b> ${i.let}</div>` : ''}`;
 }
 function closePop() { pop.classList.remove('open'); if (popBtn) popBtn.classList.remove('on'); popBtn = null; }
 function openPop(btn, key) {
@@ -213,60 +218,51 @@ document.querySelectorAll('[data-info]').forEach((el) => {
   const key = el.dataset.info; if (!INFO[key]) return;
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'ibtn'; b.textContent = 'i';
-  b.title = 'Uitleg: ' + INFO[key].t; b.setAttribute('aria-label', b.title);
+  b.dataset.key = key;
+  b.title = t('infoExplain') + ' ' + infoOf(key).t; b.setAttribute('aria-label', b.title);
   b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPop(b, key); });
   el.appendChild(b);
 });
+function refreshInfoButtons() {
+  closePop();
+  document.querySelectorAll('.ibtn[data-key]').forEach((b) => { b.title = t('infoExplain') + ' ' + infoOf(b.dataset.key).t; b.setAttribute('aria-label', b.title); });
+}
 pop.addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', closePop);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePop(); });
 window.addEventListener('resize', closePop);
 
 /* ───────────── Algemene uitleg: waar komt de data vandaan? ───────────── */
-const TABLES = [
-  ['OORDLIB.PFKLACHTEN', 'Klachten: 1 rij per klacht (klant, product, NTR, status, datums, kosten, teksten)', 'KLACHTEN'],
-  ['OORDLIB.PFKLACHTT', 'TREE-paden per klacht (nachtelijke kopie uit WinPro)', 'TREE'],
-  ['OORDLIB.PFKLACHTBH', 'Oorzaak, corrigerende en correctieve maatregel', 'OORZAAK'],
-  ['OORDLIB.PFKLACHTN', 'Omschrijving NTR-codes', 'LOOKUP'],
-  ['OORDLIB.PFKLACHTFO / PFKLACHTF2', 'Omschrijving foutcodes', 'LOOKUP'],
-  ['OORDLIB.PFKLACHTFA', 'Omschrijving statussen', 'LOOKUP'],
-  ['WINSOLPRO.PFPRODGRO', 'Omschrijving productgroepen', 'LOOKUP'],
-  ['OARTLIB.PFPROD', 'Productnamen', 'LOOKUP'],
-  ['ODIVERS.PFVERT', 'Namen vertegenwoordigers', 'LOOKUP'],
-  ['ODIVERS.PFREGIO', 'Namen regio\'s', 'LOOKUP'],
-  ['WVDJ / BADJ / HEDJ .PFKLAN', 'Klantnamen en land (Winsol / Winbalu / Helios)', 'LOOKUP'],
-];
+const TABLE_CODES = ['OORDLIB.PFKLACHTEN', 'OORDLIB.PFKLACHTT', 'OORDLIB.PFKLACHTBH', 'OORDLIB.PFKLACHTN', 'OORDLIB.PFKLACHTFO / PFKLACHTF2', 'OORDLIB.PFKLACHTFA', 'WINSOLPRO.PFPRODGRO', 'OARTLIB.PFPROD', 'ODIVERS.PFVERT', 'ODIVERS.PFREGIO', 'WVDJ / BADJ / HEDJ .PFKLAN'];
+const TABLE_QUERY = ['KLACHTEN', 'TREE', 'OORZAAK', 'LOOKUP', 'LOOKUP', 'LOOKUP', 'LOOKUP', 'LOOKUP', 'LOOKUP', 'LOOKUP', 'LOOKUP'];
+const HELP_NL = {
+  title: 'Waar komt de data vandaan?', chain: 'De keten',
+  boxes: ['<b>WinPro</b><br>klachtenmodule', '<b>AS400</b> (IBM i)<br>bibliotheek OORDLIB e.a.', '<b>KLACHTEN_DATA.xlsx</b><br>4 queries (Power Query)', '<b>Admin</b><br>laadt het bestand op in de tool', '<b>Cloudflare</b><br>beveiligde opslag', '<b>Deze pagina</b>'],
+  intro: 'Klachten worden in WinPro ingegeven en opgeslagen op de AS400. Bij "Alles vernieuwen" in KLACHTEN_DATA.xlsx haalt Excel de gegevens via ODBC op (met de eigen AS400-login van de admin). De admin laadt dat bestand wekelijks op in deze tool; enkel nieuwe en gewijzigde klachten worden bijgewerkt. De data staat afgeschermd in Cloudflare en is enkel na aanmelden zichtbaar; verkopers zien enkel de klachten van hun eigen VT-nummer(s). Een kopie wordt in de browser van deze pc bewaard, zodat de tool de volgende keer sneller opent. De SQL van de 4 queries staat in <b>DATA_OPHALEN.md</b>.',
+  tables: 'Gebruikte tabellen', thTable: 'AS400-tabel', thContent: 'Inhoud', thQuery: 'Query',
+  tableDesc: ['Klachten: 1 rij per klacht (klant, product, NTR, status, datums, kosten, teksten)', 'TREE-paden per klacht (nachtelijke kopie uit WinPro)', 'Oorzaak, corrigerende en correctieve maatregel', 'Omschrijving NTR-codes', 'Omschrijving foutcodes', 'Omschrijving statussen', 'Omschrijving productgroepen', 'Productnamen', 'Namen vertegenwoordigers', "Namen regio's", 'Klantnamen en land (Winsol / Winbalu / Helios)'],
+  rules: 'Regels die in de tool zelf vastliggen',
+  ruleList: ['Enkel klachten vanaf 1/1/2020.', 'Open / afgesloten volgens de status (afgesloten = A, W, I, O, Y).', 'Klachten "ter info" (status I en O) tellen standaard niet mee.', 'Interventie = uit te voeren actie "Interventie" (KLEVPL 4).', 'Vervolgklacht = zelfde probleem binnen 1 jaar: op het herstelorder van een vorige klacht, of op hetzelfde order met dezelfde TREE (niveau 3). Anders: andere klacht op hetzelfde order.', 'NTR- en foutcode: de bevestigde code, anders de vermoedelijke.', 'Bedragen zijn exclusief btw; bedragen boven € 100.000 of negatief tellen niet mee (invoerfouten).', 'TREE: niveau 1 tot 3, de rest als detailtekst; dubbele paden per klacht worden weggelaten.'],
+  foot: 'Klik op een <span class="ibtn" style="cursor:default">i</span> naast een veld voor de uitleg van dat veld.',
+};
 function showHelp() {
   closePop();
+  const tr = typeof HELP_TR !== 'undefined' && HELP_TR[currentUiLang()];
+  const H = { ...HELP_NL, ...(tr || {}) };
+  const arrows = ['→', '→ ODBC <code>S4411711</code> →', '→', '→', '→'];
   $('modal').innerHTML = `<div class="help-modal">
-    <div style="display:flex;align-items:flex-start;gap:10px"><h2 style="flex:1;margin:0">Waar komt de data vandaan?</h2>
-      <button class="btn-outline" type="button" id="hClose">Sluiten</button></div>
-    <h3>De keten</h3>
-    <div class="flow">
-      <span class="box"><b>WinPro</b><br>klachtenmodule</span><span class="arr">→</span>
-      <span class="box"><b>AS400</b> (IBM i)<br>bibliotheek OORDLIB e.a.</span><span class="arr">→ ODBC <code>S4411711</code> →</span>
-      <span class="box"><b>KLACHTEN_DATA.xlsx</b><br>4 queries (Power Query)</span><span class="arr">→</span>
-      <span class="box"><b>Admin</b><br>laadt het bestand op in de tool</span><span class="arr">→</span>
-      <span class="box"><b>Cloudflare</b><br>beveiligde opslag</span><span class="arr">→</span>
-      <span class="box"><b>Deze pagina</b></span>
-    </div>
-    <p style="font-size:0.82rem;color:#555;margin-top:10px">Klachten worden in WinPro ingegeven en opgeslagen op de AS400. Bij "Alles vernieuwen" in KLACHTEN_DATA.xlsx haalt Excel de gegevens via ODBC op (met de eigen AS400-login van de admin). De admin laadt dat bestand wekelijks op in deze tool; enkel nieuwe en gewijzigde klachten worden bijgewerkt. De data staat afgeschermd in Cloudflare en is enkel na aanmelden zichtbaar; verkopers zien enkel de klachten van hun eigen VT-nummer(s). Een kopie wordt in de browser van deze pc bewaard, zodat de tool de volgende keer sneller opent. De SQL van de 4 queries staat in <b>DATA_OPHALEN.md</b>.</p>
-    <h3>Gebruikte tabellen</h3>
-    <table><tr><th>AS400-tabel</th><th>Inhoud</th><th>Query</th></tr>
-      ${TABLES.map((t) => `<tr><td><code>${t[0]}</code></td><td>${t[1]}</td><td>${t[2]}</td></tr>`).join('')}
+    <div style="display:flex;align-items:flex-start;gap:10px"><h2 style="flex:1;margin:0">${H.title}</h2>
+      <button class="btn-outline" type="button" id="hClose">${t('close')}</button></div>
+    <h3>${H.chain}</h3>
+    <div class="flow">${H.boxes.map((b, i) => `<span class="box">${b}</span>${i < arrows.length ? `<span class="arr">${arrows[i]}</span>` : ''}`).join('')}</div>
+    <p style="font-size:0.82rem;color:#555;margin-top:10px">${H.intro}</p>
+    <h3>${H.tables}</h3>
+    <table><tr><th>${H.thTable}</th><th>${H.thContent}</th><th>${H.thQuery}</th></tr>
+      ${TABLE_CODES.map((c, i) => `<tr><td><code>${c}</code></td><td>${H.tableDesc[i]}</td><td>${TABLE_QUERY[i]}</td></tr>`).join('')}
     </table>
-    <h3>Regels die in de tool zelf vastliggen</h3>
-    <ul style="font-size:0.82rem;margin:0;padding-left:18px">
-      <li>Enkel klachten vanaf 1/1/2020.</li>
-      <li>Open / afgesloten volgens de status (afgesloten = A, W, I, O, Y).</li>
-      <li>Klachten "ter info" (status I en O) tellen standaard niet mee.</li>
-      <li>Interventie = uit te voeren actie "Interventie" (KLEVPL 4).</li>
-      <li>Vervolgklacht = zelfde probleem binnen 1 jaar: op het herstelorder van een vorige klacht, of op hetzelfde order met dezelfde TREE (niveau 3). Anders: andere klacht op hetzelfde order.</li>
-      <li>NTR- en foutcode: de bevestigde code, anders de vermoedelijke.</li>
-      <li>Bedragen boven € 100.000 of negatief tellen niet mee (invoerfouten).</li>
-      <li>TREE: niveau 1 tot 3, de rest als detailtekst; dubbele paden per klacht worden weggelaten.</li>
-    </ul>
-    <p style="font-size:0.78rem;color:#6b7280;margin-top:14px">Klik op een <span class="ibtn" style="cursor:default">i</span> naast een veld voor de uitleg van dat veld.</p>
+    <h3>${H.rules}</h3>
+    <ul style="font-size:0.82rem;margin:0;padding-left:18px">${H.ruleList.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <p style="font-size:0.78rem;color:#6b7280;margin-top:14px">${H.foot}</p>
   </div>`;
   $('modalBg').classList.add('open');
   $('hClose').onclick = closeDetail;

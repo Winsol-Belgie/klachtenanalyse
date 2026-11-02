@@ -9,8 +9,9 @@
 
 /* ───────────── Hulpfuncties ───────────── */
 const $ = (id) => document.getElementById(id);
-const nf = new Intl.NumberFormat('nl-BE');
-const eur = new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+let nf = new Intl.NumberFormat('nl-BE');
+let eur = new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+function setNumberLocale() { const l = (typeof currentUiLang === 'function' ? currentUiLang() : 'nl') + '-BE'; nf = new Intl.NumberFormat(l); eur = new Intl.NumberFormat(l, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }); }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const txt = (s) => String(s ?? '').replace(/_x000D_/g, '').replace(/\r/g, '').trim(); // Excel-restjes van regeleindes
 const clean = (s) => txt(s).replace(/\|/g, '!'); // SO| -> SO!, Z|P -> Z!P
@@ -24,8 +25,11 @@ const OTHER_COLOR = '#9ca3af';
 const CLOSED_STATUS = new Set(['A', 'W', 'I', 'O', 'Y']);
 const INFO_STATUS = new Set(['I', 'O']);
 const INTERV_STATUS = new Set(['N', 'V', 'Y']); // Interventies (herstellingsflow), klacht met interventie, interventie geweigerd
-const ACTIE = { 0: 'Niet ingevuld', 1: 'Leveren', 2: 'Plaatsen', 3: 'Afhalen', 4: 'Interventie', 5: 'Ter info' };
-const actieNaam = (a) => (a < 0 ? 'Onbekend (kolom KLEVPL ontbreekt)' : ACTIE[a] || 'Actie ' + a);
+const ACTIE = { 0: 'actie0', 1: 'actie1', 2: 'actie2', 3: 'actie3', 4: 'actie4', 5: 'actie5' };
+const actieNaam = (a) => (a < 0 ? t('actieUnknown') : ACTIE[a] ? t(ACTIE[a]) : t('actieN', { n: a }));
+const ntrLabel = (r) => (r.ntr ? `${r.ntr} – ${r.ntrNaam}` : t('ntrMissing'));
+const vlinkLabel = (v) => (v === 'herstelorder' ? t('vlinkRepair') : v ? t('vlinkTree') : '');
+const yesNo = (b) => (b ? t('yes') : t('no'));
 const VERVOLG_DAGEN = 365; // een vervolgklacht valt binnen 1 jaar na de vorige klacht in hetzelfde dossier
 const isOrder = (o) => o >= 1000000; // korte nummers (1, 12, 43…) zijn regionummers, geen order
 
@@ -248,6 +252,7 @@ let HIDDEN_YEARS = new Set(); try { HIDDEN_YEARS = new Set(JSON.parse(localStora
 const saveHidden = () => { try { localStorage.setItem('kl_hiddenYears', JSON.stringify([...HIDDEN_YEARS])); } catch { /* geen opslag */ } };
 const UI = { mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
 let filtered = [];
+let CHIPS = []; // labels van de actieve filters (ook voor het PDF-rapport)
 let chart = null;
 
 /* TREE: niveaus 1-3 betrouwbaar, de rest = detailtekst (kan zelf '/' bevatten) */
@@ -318,7 +323,7 @@ async function loadFromServer(retry = true) {
     META = data;
     if (ME.role === 'admin') showLastUpload();
     if (!data.available) {
-      DATA = null; $('main').hidden = true;
+      DATA = null; $('main').hidden = true; $('pdfBtn').disabled = true;
       $('dataInfo').textContent = ME.role === 'admin' ? t('dataNoneAdmin') : t('dataNone');
       return;
     }
@@ -373,6 +378,7 @@ function applyData(data) {
   indexDossiers(data.rows);
   renderDataInfo();
   $('main').hidden = false;
+  $('pdfBtn').disabled = false;
   if (F.from == null) quickPeriod('24');
   buildFilters();
   update();
@@ -576,9 +582,9 @@ function makeMS(key, opts) {
   // opts: { placeholder, items: () => [{v, label, lvl, cnt}] , limit }
   const host = $('f_' + key);
   host.innerHTML = `<button type="button" class="ms-btn"></button>
-    <div class="ms-panel"><input type="search" placeholder="Zoeken…"><div class="ms-list"></div>
+    <div class="ms-panel"><input type="search" placeholder="${esc(t('msSearch'))}"><div class="ms-list"></div>
     ${opts.presets ? `<div class="ms-presets">${Object.keys(opts.presets).map((n) => `<button type="button" class="btn-outline ms-preset" data-p="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
-    <div class="ms-foot"><span class="info"></span><span class="ms-acts"><button type="button" class="btn-outline ms-all" title="Alle (gefilterde) opties aanvinken">Alles</button><button type="button" class="btn-outline ms-clear">Wissen</button></span></div></div>`;
+    <div class="ms-foot"><span class="info"></span><span class="ms-acts"><button type="button" class="btn-outline ms-all" title="${esc(t('msAllTip'))}">${esc(t('msAll'))}</button><button type="button" class="btn-outline ms-clear">${esc(t('msClear'))}</button></span></div></div>`;
   const btn = host.querySelector('.ms-btn'), list = host.querySelector('.ms-list'), search = host.querySelector('input[type=search]'), info = host.querySelector('.info');
   const st = { key, opts, host, items: opts.items() };
   const labelOf = new Map(st.items.map((i) => [i.v, i.label]));
@@ -597,14 +603,14 @@ function makeMS(key, opts) {
       html += `<label class="ms-item lvl${i.lvl || 1}"><input type="checkbox" value="${esc(i.v)}"${sel.has(i.v) ? ' checked' : ''}><span class="lbl">${esc(i.label)}</span>${i.cnt != null ? `<span class="cnt">${nf.format(i.cnt)}</span>` : ''}</label>`;
       shown++;
     }
-    list.innerHTML = html || '<div class="empty">Geen resultaten</div>';
-    info.textContent = items.length > shown ? `${shown} van ${nf.format(items.length)} getoond — verfijn de zoekterm` : `${nf.format(items.length)} opties`;
+    list.innerHTML = html || `<div class="empty">${esc(t('msNone'))}</div>`;
+    info.textContent = items.length > shown ? t('msShown', { n: shown, total: nf.format(items.length) }) : t('msOptions', { n: nf.format(items.length) });
   };
   st.render = render;
   st.syncBtn = () => {
     const sel = F[key];
     btn.classList.toggle('has', sel.size > 0);
-    btn.textContent = sel.size === 0 ? (opts.placeholder || 'Alle') : sel.size === 1 ? st.labelOf([...sel][0]) : `${sel.size} gekozen`;
+    btn.textContent = sel.size === 0 ? t('optAll') : sel.size === 1 ? st.labelOf([...sel][0]) : t('msChosen', { n: sel.size });
     btn.title = [...sel].map(st.labelOf).join('\n');
   };
   btn.addEventListener('click', (e) => {
@@ -627,7 +633,7 @@ function makeMS(key, opts) {
   });
   host.querySelectorAll('.ms-preset').forEach((b) => b.addEventListener('click', () => {
     const codes = opts.presets[b.dataset.p] || [];
-    if (!codes.length) { info.textContent = `Set “${b.dataset.p}” is nog niet ingevuld`; return; }
+    if (!codes.length) { info.textContent = t('presetEmpty', { p: b.dataset.p }); return; }
     const have = new Set(st.items.map((i) => i.v));
     F[key].clear(); for (const c of codes) if (have.has(c)) F[key].add(c);
     st.syncBtn(); render(); UI.page = 0; update();
@@ -648,15 +654,15 @@ const byLabel = (a, b) => a.label.localeCompare(b.label, 'nl');
 function buildFilters() {
   makeMS('pg', { presets: PG_PRESETS, items: () => countBy((r) => [[r.pg, `${r.pgNaam}${r.pg ? ' (' + r.pg + ')' : ''}`]]).sort(byCnt) });
   makeMS('prod', { items: () => countBy((r) => [[String(r.prod), `${r.prodNaam} (${r.prod})`]]).sort(byCnt) });
-  makeMS('ntr', { items: () => countBy((r) => [[String(r.ntr), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : 'NTR ontbreekt']]).sort((a, b) => num(a.v) - num(b.v)) });
+  makeMS('ntr', { items: () => countBy((r) => [[String(r.ntr), ntrLabel(r)]]).sort((a, b) => num(a.v) - num(b.v)) });
   makeMS('fout', { items: () => countBy((r) => (r.fout ? [[String(r.fout), `${r.fout} – ${r.foutNaam}`]] : [])).sort((a, b) => num(a.v) - num(b.v)) });
-  makeMS('klant', { limit: 200, items: () => countBy((r) => [[r.klant, `${r.klantNaam || '(naam onbekend)'} – ${FIRMA[r.firma] ? r.firma + ' ' : ''}${r.klnr}`]]).sort(byCnt) });
+  makeMS('klant', { limit: 200, items: () => countBy((r) => [[r.klant, `${r.klantNaam || t('nameUnknown')} – ${FIRMA[r.firma] ? r.firma + ' ' : ''}${r.klnr}`]]).sort(byCnt) });
   makeMS('actie', { items: () => countBy((r) => [[String(r.actie), actieNaam(r.actie)]]).sort((a, b) => num(a.v) - num(b.v)) });
   makeMS('status', { items: () => countBy((r) => [[r.fase, `${r.faseNaam} (${r.fase})`]]).sort(byCnt) });
   makeMS('vert', { items: () => countBy((r) => [[String(r.vert), `${r.vertNaam || 'VT'} (${r.vert})`]]).sort(byLabel) });
   makeMS('regio', { items: () => countBy((r) => [[String(r.regio), `${r.regio} ${r.regioNaam}`.trim()]]).sort((a, b) => num(a.v) - num(b.v)) });
   makeMS('tree', {
-    placeholder: 'Alle', limit: 600,
+    limit: 600,
     items: () => {
       // hiërarchisch: niveau 1 > 2 > 3 > detail, gesorteerd als een boom
       const m = new Map();
@@ -715,8 +721,8 @@ function update() {
 
 function renderChips() {
   const c = []; const add = (label, clear, tip, key) => c.push({ label, clear, tip, key });
-  if (F.from != null || F.to != null) add(`Periode ${F.from != null ? fmtDate(F.from) : '…'} – ${F.to != null ? fmtDate(F.to) : '…'}`, null);
-  const names = { pg: 'Productgroep', prod: 'Product', tree: 'TREE', ntr: 'NTR', fout: 'Fout', klant: 'Klant', status: 'Status', vert: 'VT', regio: 'Regio', actie: 'Actie' };
+  if (F.from != null || F.to != null) add(`${t('chipPeriod')} ${F.from != null ? fmtDate(F.from) : '…'} – ${F.to != null ? fmtDate(F.to) : '…'}`, null);
+  const names = { pg: t('lbl_pg'), prod: t('lbl_prod'), tree: 'TREE', ntr: 'NTR', fout: t('chipFout'), klant: t('lbl_klant'), status: t('lbl_status'), vert: t('chipVt'), regio: t('lbl_regio'), actie: t('chipActie') };
   for (const k of Object.keys(names)) {
     if (!F[k].size || !MS[k]) continue;
     const st = MS[k], sel = [...F[k]], lab = (v) => st.labelOf(v);
@@ -724,20 +730,21 @@ function renderChips() {
     let txt;
     const preset = st.opts.presets && Object.entries(st.opts.presets).find(([, c]) => c.length && c.filter((x) => st.items.some((i) => i.v === x)).length === sel.length && c.every((x) => F[k].has(x) || !st.items.some((i) => i.v === x)));
     if (preset) txt = preset[0];
-    else if (!missing.length) txt = 'alles';
+    else if (!missing.length) txt = t('chipAllOf');
     else if (sel.length <= 2) txt = sel.map(lab).join(', ');
-    else if (missing.length <= 2) txt = 'alles behalve ' + missing.map(lab).join(', ');
-    else txt = `${sel.length} van ${st.total}`;
-    const tip = missing.length && missing.length < sel.length ? 'Alles behalve:\n' + missing.map(lab).join('\n') : sel.map(lab).join('\n');
+    else if (missing.length <= 2) txt = t('chipExcept', { list: missing.map(lab).join(', ') });
+    else txt = t('chipNofM', { n: sel.length, m: st.total });
+    const tip = missing.length && missing.length < sel.length ? t('chipExceptTip') + '\n' + missing.map(lab).join('\n') : sel.map(lab).join('\n');
     add(`${names[k]}: ${txt}`, () => { F[k].clear(); MS[k].syncBtn(); }, tip, k);
   }
-  if (F.open) add(F.open === 'open' ? 'Enkel open' : 'Enkel afgesloten', () => { F.open = ''; $('fOpen').value = ''; });
-  if (F.vervolg) add({ first: 'Enkel eerste klacht op het order', vervolg: 'Enkel vervolgklachten', ander: 'Enkel andere klacht op hetzelfde order' }[F.vervolg], () => { F.vervolg = ''; $('fVervolg').value = ''; });
-  if (F.info !== 'excl') add(F.info === 'only' ? 'Enkel “ter info”' : 'Inclusief “ter info”', () => { F.info = 'excl'; $('fInfo').value = 'excl'; });
-  if (F.text) add(`Zoekterm: “${F.text}”`, () => { F.text = ''; $('fText').value = ''; });
+  if (F.open) add(F.open === 'open' ? t('onlyOpen') : t('onlyClosed'), () => { F.open = ''; $('fOpen').value = ''; });
+  if (F.vervolg) add(t({ first: 'vvFirst', vervolg: 'vvOnly', ander: 'vvAnder' }[F.vervolg]), () => { F.vervolg = ''; $('fVervolg').value = ''; });
+  if (F.info !== 'excl') add(F.info === 'only' ? t('infoOnly') : t('chipInfoIncl'), () => { F.info = 'excl'; $('fInfo').value = 'excl'; });
+  if (F.text) add(t('chipSearch', { q: F.text }), () => { F.text = ''; $('fText').value = ''; });
+  CHIPS = c.map((x) => ({ label: x.label, tip: x.tip }));
   const el = $('chips');
-  el.innerHTML = c.map((x, i) => `<span class="chip${x.key ? ' link' : ''}"${x.tip ? ` title="${esc(x.tip)}"` : ''}${x.key ? ` data-k="${x.key}"` : ''}>${esc(x.label)}${x.clear ? `<button type="button" data-i="${i}" title="Verwijderen">×</button>` : ''}</span>`).join('') +
-    (c.length > 1 ? '<button type="button" class="btn-outline clear" id="clearAll">Alle filters wissen</button>' : '');
+  el.innerHTML = c.map((x, i) => `<span class="chip${x.key ? ' link' : ''}"${x.tip ? ` title="${esc(x.tip)}"` : ''}${x.key ? ` data-k="${x.key}"` : ''}>${esc(x.label)}${x.clear ? `<button type="button" data-i="${i}" title="${esc(t('remove'))}">×</button>` : ''}</span>`).join('') +
+    (c.length > 1 ? `<button type="button" class="btn-outline clear" id="clearAll">${esc(t('clearAll'))}</button>` : '');
   el.querySelectorAll('button[data-i]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); c[+b.dataset.i].clear(); UI.page = 0; update(); }));
   el.querySelectorAll('.chip[data-k]').forEach((ch) => ch.addEventListener('click', (e) => {
     e.stopPropagation(); const h = MS[ch.dataset.k].host;
@@ -798,17 +805,17 @@ function splitKeys(r) {
   switch (UI.split) {
     case 'pg': return [r.pgNaam];
     case 'prod': return [r.prodNaam];
-    case 'ntr': return [r.ntr ? `${r.ntr} – ${r.ntrNaam}` : 'NTR ontbreekt'];
+    case 'ntr': return [ntrLabel(r)];
     case 'klant': return [r.klantNaam || r.klant];
-    case 'status': return [r.open ? 'Open' : 'Afgesloten'];
+    case 'status': return [r.open ? t('open') : t('closed')];
     case 'actie': return [actieNaam(r.actie)];
-    case 'vervolg': return [r.vervolg ? 'Vervolgklacht' : r.andereOpOrder ? 'Andere klacht op hetzelfde order' : 'Eerste klacht op het order'];
+    case 'vervolg': return [r.vervolg ? t('sVervolg') : r.andereOpOrder ? t('sAnder') : t('sFirst')];
     case 't1': case 't2': case 't3': {
       const lv = +UI.split[1];
       const s = new Set(r.tree.map((p) => treeNodes(p)[lv - 1]).filter(Boolean));
       return [...s]; // klachten zonder TREE tellen niet mee in deze opsplitsing
     }
-    default: return ['Totaal'];
+    default: return [t('total')];
   }
 }
 function renderTrend() {
@@ -827,7 +834,7 @@ function renderTrend() {
   if (list.length > 8) {
     const rest = list.slice(7); const other = new Array(keys.length).fill(0);
     for (const s of rest) s.data.forEach((v, i) => { other[i] += v; });
-    list = [...list.slice(0, 7), { name: `Overig (${rest.length})`, data: other, other: true }];
+    list = [...list.slice(0, 7), { name: t('other', { n: rest.length }), data: other, other: true }];
   }
   const ds = list.map((s, i) => ({
     label: s.name, data: s.data,
@@ -862,14 +869,14 @@ function renderTrend() {
   const lastKey = keys[keys.length - 1];
   const partial = lastKey && periodKey(maxD + 1) === lastKey;
   const notes = [];
-  if (UI.split.startsWith('t')) notes.push('Klachten zonder TREE tellen niet mee in deze opsplitsing; een klacht met meerdere TREE-paden telt in elk pad.');
-  if (partial) notes.push(`De laatste periode (${prettyPeriod(lastKey)}) is nog niet volledig.`);
+  if (UI.split.startsWith('t')) notes.push(t('noteTreeSplit'));
+  if (partial) notes.push(t('notePartial', { p: prettyPeriod(lastKey) }));
   $('legend').innerHTML = (ds.length > 1 ? ds.map((d) => `<span><i style="background:${d.borderColor}"></i>${esc(d.label)}</span>`).join('') : '') +
     (notes.length ? `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>` : '');
 }
 /* Jaarvergelijking: per jaar cumulatief van januari tot december.
  * Alle filters gelden, behalve de periode: elk jaar in de data krijgt een lijn. */
-const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const MONTHS = () => t('months').split(',');
 function yearSlot(dn) {
   const d = new Date(dn * 864e5); const y = d.getUTCFullYear();
   if (UI.cumGran === 'M') return [y, d.getUTCMonth()];
@@ -884,9 +891,9 @@ function renderQual() {
   for (const r of filtered) { const i = pos.get(periodKey(r.d)); if (i == null) continue; n[i]++; if (r.interv) iv[i]++; if (r.vervolg) vv[i]++; if (r.andereOpOrder) ao[i]++; }
   const pct = (a) => a.map((v, i) => (n[i] ? Math.round((v / n[i]) * 1000) / 10 : null));
   const ds = [
-    { label: '% vervolgklachten', data: pct(vv), cnt: vv, borderColor: COLORS[0], backgroundColor: COLORS[0], borderWidth: 2.5, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
-    { label: '% met interventie', data: pct(iv), cnt: iv, borderColor: COLORS[1], backgroundColor: COLORS[1], borderWidth: 2, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
-    { label: '% andere klacht op hetzelfde order', data: pct(ao), cnt: ao, borderColor: OTHER_COLOR, backgroundColor: OTHER_COLOR, borderWidth: 2, borderDash: [5, 4], pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
+    { label: t('qVervolg'), data: pct(vv), cnt: vv, borderColor: COLORS[0], backgroundColor: COLORS[0], borderWidth: 2.5, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
+    { label: t('qInterv'), data: pct(iv), cnt: iv, borderColor: COLORS[1], backgroundColor: COLORS[1], borderWidth: 2, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
+    { label: t('qAnder'), data: pct(ao), cnt: ao, borderColor: OTHER_COLOR, backgroundColor: OTHER_COLOR, borderWidth: 2, borderDash: [5, 4], pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
   ];
   if (chart) chart.destroy();
   chart = new Chart($('trend'), {
@@ -898,25 +905,25 @@ function renderQual() {
       plugins: {
         legend: { display: false },
         tooltip: { backgroundColor: '#111', padding: 10, boxPadding: 4, callbacks: {
-          label: (c) => ` ${c.dataset.label}: ${c.raw == null ? '–' : nf.format(c.raw) + '%'} (${nf.format(c.dataset.cnt[c.dataIndex])} van ${nf.format(n[c.dataIndex])})`,
+          label: (c) => ` ${c.dataset.label}: ${c.raw == null ? '–' : nf.format(c.raw) + '%'} (${t('xOfY', { x: nf.format(c.dataset.cnt[c.dataIndex]), y: nf.format(n[c.dataIndex]) })})`,
         } },
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
-        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: '% van de klachten in de periode', color: '#6b7280' }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: t('qAxis'), color: '#6b7280' }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
       },
     },
   });
   const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0);
-  const notes = ['Vervolgklacht = zelfde probleem binnen 1 jaar: op het herstelorder van een vorige klacht, of op hetzelfde order met dezelfde TREE (niveau 3). Andere klacht op hetzelfde order = nieuw probleem (ander of onbekend onderwerp). Interventie = uit te voeren actie "Interventie". Alle filters gelden.'];
-  if (keys.length && periodKey(maxD + 1) === keys[keys.length - 1]) notes.push(`De laatste periode (${prettyPeriod(keys[keys.length - 1])}) is nog niet volledig; recente klachten kunnen later nog een vervolg krijgen.`);
+  const notes = [t('noteQual')];
+  if (keys.length && periodKey(maxD + 1) === keys[keys.length - 1]) notes.push(t('notePartialQual', { p: prettyPeriod(keys[keys.length - 1]) }));
   $('legend').innerHTML = ds.map((d) => `<span><i style="background:${d.borderColor}"></i>${esc(d.label)}</span>`).join('') + `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
 }
 
 function renderCumul() {
   const rows = DATA.rows.filter((r) => matches(r, 'period'));
   const nSlots = UI.cumGran === 'M' ? 12 : 53;
-  const labels = UI.cumGran === 'M' ? MONTHS : Array.from({ length: 53 }, (_, i) => String(i + 1));
+  const labels = UI.cumGran === 'M' ? MONTHS() : Array.from({ length: 53 }, (_, i) => String(i + 1));
   const val = (r) => (UI.measure === 'cost' ? r.cost : 1);
   const per = new Map();
   for (const r of rows) {
@@ -935,12 +942,12 @@ function renderCumul() {
     key: String(s.y), label: String(s.y), data: s.data, borderColor: colorOf(s.y), backgroundColor: colorOf(s.y),
     borderWidth: s.y === curY ? 3 : 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false,
   }));
-  const notes = ['Alle filters gelden, behalve de periode: elk jaar wordt van januari tot december getoond.'];
+  const notes = [t('noteCumul')];
   if (UI.target && per.has(curY - 1)) {
     const f = 1 + Number(UI.target) / 100;
     const prev = cum(per.get(curY - 1), nSlots - 1).map((v) => (v == null ? null : Math.round(v * f * 100) / 100));
-    ds.push({ key: 'doel', label: `${curY} doel (${UI.target}% t.o.v. ${curY - 1})`, data: prev, borderColor: '#e34948', backgroundColor: '#e34948', borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 });
-  } else if (UI.target) notes.push(`Geen doellijn: er zijn geen gegevens voor ${curY - 1} in deze selectie.`);
+    ds.push({ key: 'doel', label: t('targetLbl', { y: curY, p: UI.target, py: curY - 1 }), data: prev, borderColor: '#e34948', backgroundColor: '#e34948', borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 });
+  } else if (UI.target) notes.push(t('noTargetData', { y: curY - 1 }));
   const isCost = UI.measure === 'cost';
   if (chart) chart.destroy();
   chart = new Chart($('trend'), {
@@ -954,20 +961,20 @@ function renderCumul() {
         tooltip: {
           backgroundColor: '#111', padding: 10, boxPadding: 4, filter: (c) => c.raw != null,
           callbacks: {
-            title: (c) => (UI.cumGran === 'M' ? 't.e.m. ' + c[0].label : 't.e.m. week ' + c[0].label),
+            title: (c) => (UI.cumGran === 'M' ? t('uptoMonth', { m: c[0].label }) : t('uptoWeek', { w: c[0].label })),
             label: (c) => ` ${c.dataset.label}: ${isCost ? eur.format(c.raw) : nf.format(c.raw)}`,
           },
         },
       },
       scales: {
-        x: { grid: { display: false }, title: { display: true, text: UI.cumGran === 'M' ? 'Maand' : 'Week', color: '#6b7280' }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
-        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: isCost ? 'NTR-kost cumulatief' : 'Aantal klachten cumulatief', color: '#6b7280' }, ticks: { color: '#6b7280', precision: 0, callback: (v) => (isCost ? eur.format(v) : nf.format(v)) } },
+        x: { grid: { display: false }, title: { display: true, text: UI.cumGran === 'M' ? t('month') : t('week'), color: '#6b7280' }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: isCost ? t('cumCost') : t('cumCount'), color: '#6b7280' }, ticks: { color: '#6b7280', precision: 0, callback: (v) => (isCost ? eur.format(v) : nf.format(v)) } },
       },
     },
   });
   // Vinkjes per jaar: kies welke jaren getoond worden (onthouden in deze browser)
-  $('legend').innerHTML = '<span class="yr-lbl">Toon:</span>' + ds.map((d) => `<label class="yr${HIDDEN_YEARS.has(d.key) ? ' off' : ''}"><input type="checkbox" data-yr="${esc(d.key)}"${HIDDEN_YEARS.has(d.key) ? '' : ' checked'}><i style="background:${d.borderColor}${d.borderDash ? ';background:repeating-linear-gradient(90deg,#e34948 0 5px,transparent 5px 8px)' : ''}"></i>${esc(d.label)}</label>`).join('') +
-    '<button type="button" class="yr-q" data-q="all">Alle</button><button type="button" class="yr-q" data-q="3">Laatste 3</button>' +
+  $('legend').innerHTML = `<span class="yr-lbl">${esc(t('show'))}</span>` + ds.map((d) => `<label class="yr${HIDDEN_YEARS.has(d.key) ? ' off' : ''}"><input type="checkbox" data-yr="${esc(d.key)}"${HIDDEN_YEARS.has(d.key) ? '' : ' checked'}><i style="background:${d.borderColor}${d.borderDash ? ';background:repeating-linear-gradient(90deg,#e34948 0 5px,transparent 5px 8px)' : ''}"></i>${esc(d.label)}</label>`).join('') +
+    `<button type="button" class="yr-q" data-q="all">${esc(t('optAll'))}</button><button type="button" class="yr-q" data-q="3">${esc(t('last3'))}</button>` +
     `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
   $('legend').querySelectorAll('input[data-yr]').forEach((cb) => cb.addEventListener('change', () => {
     if (cb.checked) HIDDEN_YEARS.delete(cb.dataset.yr); else HIDDEN_YEARS.add(cb.dataset.yr);
@@ -981,13 +988,14 @@ function renderCumul() {
 }
 
 function prettyPeriod(k) {
-  if (UI.gran === 'M') { const [y, m] = k.split('-'); return ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][+m - 1] + ' ' + y.slice(2); }
+  if (UI.gran === 'M') { const [y, m] = k.split('-'); return MONTHS()[+m - 1] + ' ' + y.slice(2); }
+  if (UI.gran === 'Q') return k.replace('-K', '-' + t('qShort'));
   return k;
 }
 
 /* ───────────── Top-lijsten ───────────── */
 function renderBars(el, entries, onClick, total) {
-  if (!entries.length) { el.innerHTML = '<div class="empty">Geen gegevens voor deze selectie.</div>'; return; }
+  if (!entries.length) { el.innerHTML = `<div class="empty">${esc(t('noData'))}</div>`; return; }
   const max = entries[0].n;
   el.innerHTML = entries.map((e, i) => `<div class="bar-row" data-i="${i}" title="${esc(e.label)}">
       <div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, (e.n / max) * 100)}%"></div><div class="bar-lbl">${esc(e.label)}</div></div>
@@ -1006,21 +1014,21 @@ function renderTops() {
   const treeRows = topBy((r) => { const s = new Set(r.tree.map((p) => treeNodes(p)[Math.min(lv, treeNodes(p).length) - 1])); return [...s].map((n) => [n, n]); }, 12);
   renderBars($('topTree'), treeRows, (e) => addFilter('tree', e.key), total);
   renderBars($('topProd'), topBy((r) => [[String(r.prod), r.prodNaam]]), (e) => addFilter('prod', e.key), total);
-  renderBars($('topNtr'), topBy((r) => [[String(r.ntr), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : 'NTR ontbreekt']]), (e) => addFilter('ntr', e.key), total);
-  renderBars($('topKlant'), topBy((r) => [[r.klant, `${r.klantNaam || '(naam onbekend)'} (${r.klnr})`]]), (e) => addFilter('klant', e.key), total);
+  renderBars($('topNtr'), topBy((r) => [[String(r.ntr), ntrLabel(r)]]), (e) => addFilter('ntr', e.key), total);
+  renderBars($('topKlant'), topBy((r) => [[r.klant, `${r.klantNaam || t('nameUnknown')} (${r.klnr})`]]), (e) => addFilter('klant', e.key), total);
 }
 
 /* ───────────── Tabel ───────────── */
 const COLS = [
-  { k: 'id', t: 'Klacht', f: (r) => r.id },
-  { k: 'd', t: 'Datum', f: (r) => fmtDate(r.d), s: (r) => r.d },
-  { k: 'klant', t: 'Klant', f: (r) => r.klantNaam || r.klant, s: (r) => r.klantNaam, clip: 1 },
-  { k: 'prod', t: 'Product', f: (r) => r.prodNaam, clip: 1 },
-  { k: 'ntr', t: 'NTR', f: (r) => (r.ntr ? `${r.ntr} – ${r.ntrNaam}` : '–'), s: (r) => r.ntr, clip: 1 },
-  { k: 'tree', t: 'TREE', f: (r) => (r.tree[0] ? r.tree[0].split('/').slice(1).join(' › ') : '') + (r.tree.length > 1 ? ` (+${r.tree.length - 1})` : ''), s: (r) => r.tree[0] || '', clip: 1 },
-  { k: 'oms', t: 'Omschrijving', f: (r) => r.oms.replace(/\s+/g, ' '), clip: 1 },
-  { k: 'open', t: 'Status', html: (r) => `<span class="pill ${r.open ? 'open' : 'closed'}" title="${esc(r.faseNaam)}">${r.open ? 'Open' : 'Afgesloten'}</span>`, s: (r) => (r.open ? 1 : 0) },
-  { k: 'cost', t: 'NTR-kost', f: (r) => (r.cost ? eur.format(r.cost) : ''), s: (r) => r.cost, num: 1 },
+  { k: 'id', t: 'colId', f: (r) => r.id },
+  { k: 'd', t: 'colDate', f: (r) => fmtDate(r.d), s: (r) => r.d },
+  { k: 'klant', t: 'lbl_klant', f: (r) => r.klantNaam || r.klant, s: (r) => r.klantNaam, clip: 1 },
+  { k: 'prod', t: 'lbl_prod', f: (r) => r.prodNaam, clip: 1 },
+  { k: 'ntr', t: 'colNtr', f: (r) => (r.ntr ? `${r.ntr} – ${r.ntrNaam}` : '–'), s: (r) => r.ntr, clip: 1 },
+  { k: 'tree', t: 'colTree', f: (r) => (r.tree[0] ? r.tree[0].split('/').slice(1).join(' › ') : '') + (r.tree.length > 1 ? ` (+${r.tree.length - 1})` : ''), s: (r) => r.tree[0] || '', clip: 1 },
+  { k: 'oms', t: 'colOms', f: (r) => r.oms.replace(/\s+/g, ' '), clip: 1 },
+  { k: 'open', t: 'lbl_status', html: (r) => `<span class="pill ${r.open ? 'open' : 'closed'}" title="${esc(r.faseNaam)}">${esc(r.open ? t('open') : t('closed'))}</span>`, s: (r) => (r.open ? 1 : 0) },
+  { k: 'cost', t: 'ntrCost', f: (r) => (r.cost ? eur.format(r.cost) : ''), s: (r) => r.cost, num: 1 },
 ];
 const PAGE = 50;
 function renderTable() {
@@ -1030,15 +1038,15 @@ function renderTable() {
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   UI.page = Math.min(UI.page, pages - 1);
   const slice = rows.slice(UI.page * PAGE, UI.page * PAGE + PAGE);
-  $('tbl').innerHTML = `<thead><tr>${COLS.map((c) => `<th data-k="${c.k}" class="${c.num ? 'num' : ''}">${c.t} <span class="arr">${UI.sort.key === c.k ? (UI.sort.dir > 0 ? '▲' : '▼') : ''}</span></th>`).join('')}</tr></thead>
-    <tbody>${slice.map((r) => `<tr data-id="${r.id}">${COLS.map((c) => `<td class="${c.clip ? 'clip' : ''} ${c.num ? 'num' : ''}">${c.html ? c.html(r) : esc(c.f(r))}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${COLS.length}" class="empty">Geen klachten voor deze selectie.</td></tr>`}</tbody>`;
+  $('tbl').innerHTML = `<thead><tr>${COLS.map((c) => `<th data-k="${c.k}" class="${c.num ? 'num' : ''}">${esc(t(c.t))} <span class="arr">${UI.sort.key === c.k ? (UI.sort.dir > 0 ? '▲' : '▼') : ''}</span></th>`).join('')}</tr></thead>
+    <tbody>${slice.map((r) => `<tr data-id="${r.id}">${COLS.map((c) => `<td class="${c.clip ? 'clip' : ''} ${c.num ? 'num' : ''}">${c.html ? c.html(r) : esc(c.f(r))}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${COLS.length}" class="empty">${esc(t('noRows'))}</td></tr>`}</tbody>`;
   $('tbl').querySelectorAll('th').forEach((th) => th.addEventListener('click', () => {
     const k = th.dataset.k; UI.sort = { key: k, dir: UI.sort.key === k ? -UI.sort.dir : (k === 'd' || k === 'cost' ? -1 : 1) }; renderTable();
   }));
   $('tbl').querySelectorAll('tbody tr[data-id]').forEach((tr) => tr.addEventListener('click', () => showDetail(+tr.dataset.id)));
-  $('pager').innerHTML = `${nf.format(rows.length)} klachten · pagina ${UI.page + 1} van ${pages}
-    <button class="btn-outline" id="pPrev" ${UI.page === 0 ? 'disabled' : ''}>‹ Vorige</button>
-    <button class="btn-outline" id="pNext" ${UI.page >= pages - 1 ? 'disabled' : ''}>Volgende ›</button>`;
+  $('pager').innerHTML = `${esc(t('pager', { n: nf.format(rows.length), p: UI.page + 1, pp: pages }))}
+    <button class="btn-outline" id="pPrev" ${UI.page === 0 ? 'disabled' : ''}>‹ ${esc(t('prev'))}</button>
+    <button class="btn-outline" id="pNext" ${UI.page >= pages - 1 ? 'disabled' : ''}>${esc(t('next'))} ›</button>`;
   $('pPrev').onclick = () => { UI.page--; renderTable(); };
   $('pNext').onclick = () => { UI.page++; renderTable(); };
 }
@@ -1049,24 +1057,24 @@ function showDetail(id) {
   const kv = (l, v) => `<div><span>${l}</span><b>${esc(v || '–')}</b></div>`;
   $('modal').innerHTML = `
     <div style="display:flex;gap:10px;align-items:flex-start">
-      <div style="flex:1"><h2>Klacht ${r.id}</h2>
+      <div style="flex:1"><h2>${esc(t('complaintN', { n: r.id }))}</h2>
       <div class="sub">${esc(r.klantNaam || '')} (${esc(FIRMA[r.firma] || r.firma)} ${r.klnr})${r.land ? ' · ' + esc(r.land) : ''} · ${fmtDate(r.d)} · <span class="pill ${r.open ? 'open' : 'closed'}">${esc(r.faseNaam)}</span></div></div>
-      <a class="btn-outline" href="${WINPRO_KLACHT}${r.id}" target="_blank" rel="noopener">Open in WinPro ↗</a>
-      <button class="btn-outline" id="mClose" type="button">Sluiten</button>
+      <a class="btn-outline" href="${WINPRO_KLACHT}${r.id}" target="_blank" rel="noopener">${esc(t('openWinpro'))} ↗</a>
+      <button class="btn-outline" id="mClose" type="button">${esc(t('close'))}</button>
     </div>
     <div class="dl">
-      ${kv('Productgroep', r.pgNaam)}${kv('Product', `${r.prodNaam} (${r.prod})`)}${kv('Order', fmtOrder(r.order) || '')}
-      ${kv('NTR' + (r.ntr && !r.ntrBevestigd ? ' (vermoedelijk)' : ''), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : 'ontbreekt')}${kv('Foutcode', r.fout ? `${r.fout} – ${r.foutNaam}` : '')}${kv('NTR-order (herstelorder)', fmtOrder(r.ntrOrder) || '')}
-      ${kv('NTR-kost materiaal', r.costMat ? eur.format(r.costMat) : '')}${kv('NTR-kost plaatsing', r.costPl ? eur.format(r.costPl) : '')}${kv('Behandeld door', r.beh)}${kv('Uit te voeren actie', actieNaam(r.actie))}${kv('(I)-vlag in WinPro', r.intervFlag === '1' || r.intervFlag === 'I' ? 'ja (' + r.intervFlag + ')' : 'nee')}${kv('Vervolgklacht', r.vervolg ? `ja, ${r.vgap} dagen na de vorige (${r.vlink})` : r.andereOpOrder ? 'nee, ander probleem op hetzelfde order' : 'nee')}
-      ${kv('Vertegenwoordiger', r.vertNaam ? `${r.vertNaam} (${r.vert})` : r.vert)}${kv('Regio', `${r.regio} ${r.regioNaam}`)}${kv('Doorlooptijd', !r.open && r.dA >= r.d ? (r.dA - r.d) + ' dagen' : '')}
-      ${kv('In behandeling', fmtDate(r.dB))}${kv('In magazijn', fmtDate(r.dM))}${kv('Bij plaatsingsdienst', fmtDate(r.dD))}
-      ${kv('Opgelost voor klant', fmtDate(r.dK))}${kv('Afgesloten', fmtDate(r.dA))}
+      ${kv(t('lbl_pg'), r.pgNaam)}${kv(t('lbl_prod'), `${r.prodNaam} (${r.prod})`)}${kv(t('order'), fmtOrder(r.order) || '')}
+      ${kv('NTR' + (r.ntr && !r.ntrBevestigd ? ' (' + t('presumed') + ')' : ''), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : t('missing'))}${kv(t('lbl_fout'), r.fout ? `${r.fout} – ${r.foutNaam}` : '')}${kv(t('ntrOrder'), fmtOrder(r.ntrOrder) || '')}
+      ${kv(t('costMat'), r.costMat ? eur.format(r.costMat) : '')}${kv(t('costPl'), r.costPl ? eur.format(r.costPl) : '')}${kv(t('handledBy'), r.beh)}${kv(t('lbl_actie'), actieNaam(r.actie))}${kv(t('iFlag'), r.intervFlag === '1' || r.intervFlag === 'I' ? t('yes') + ' (' + r.intervFlag + ')' : t('no'))}${kv(t('sVervolg'), r.vervolg ? t('vvYes', { d: r.vgap, how: vlinkLabel(r.vlink) }) : r.andereOpOrder ? t('vvNoOther') : t('no'))}
+      ${kv(t('lbl_vert'), r.vertNaam ? `${r.vertNaam} (${r.vert})` : r.vert)}${kv(t('lbl_regio'), `${r.regio} ${r.regioNaam}`)}${kv(t('leadTime'), !r.open && r.dA >= r.d ? t('nDays', { n: r.dA - r.d }) : '')}
+      ${kv(t('dB'), fmtDate(r.dB))}${kv(t('dM'), fmtDate(r.dM))}${kv(t('dD'), fmtDate(r.dD))}
+      ${kv(t('dK'), fmtDate(r.dK))}${kv(t('dA'), fmtDate(r.dA))}
     </div>
     ${dossierHtml(r)}
-    <h4>TREE</h4><div>${r.tree.length ? r.tree.map((p) => `<span class="tree-path">${esc(p.split('/').join(' › '))}</span>`).join('') : '<span class="empty">Niet ingevuld</span>'}</div>
-    <h4>Omschrijving klacht</h4><div class="txt-block">${esc(r.oms) || '–'}</div>
-    <h4>Verwachte oplossing</h4><div class="txt-block">${esc(r.opl) || '–'}</div>
-    ${r.oorz.map((o) => `<h4>Oorzaak</h4><div class="txt-block">${esc(o.oorzaak) || '–'}</div><h4>Corrigerende maatregel</h4><div class="txt-block">${esc(o.corr) || '–'}</div><h4>Correctieve maatregel</h4><div class="txt-block">${esc(o.corrA) || '–'}</div>`).join('')}
+    <h4>TREE</h4><div>${r.tree.length ? r.tree.map((p) => `<span class="tree-path">${esc(p.split('/').join(' › '))}</span>`).join('') : `<span class="empty">${esc(t('notFilled'))}</span>`}</div>
+    <h4>${esc(t('omsTitle'))}</h4><div class="txt-block">${esc(r.oms) || '–'}</div>
+    <h4>${esc(t('oplTitle'))}</h4><div class="txt-block">${esc(r.opl) || '–'}</div>
+    ${r.oorz.map((o) => `<h4>${esc(t('cause'))}</h4><div class="txt-block">${esc(o.oorzaak) || '–'}</div><h4>${esc(t('corr'))}</h4><div class="txt-block">${esc(o.corr) || '–'}</div><h4>${esc(t('corrA'))}</h4><div class="txt-block">${esc(o.corrA) || '–'}</div>`).join('')}
   `;
   $('modalBg').classList.add('open');
   $('mClose').onclick = closeDetail;
@@ -1077,7 +1085,7 @@ function dossierHtml(r) {
   const byId = new Map(DATA.rows.map((x) => [x.id, x]));
   const ids = r.rootOrder ? ORDERS.get(r.rootOrder) || [r.id] : DOSSIERS.get(r.dos) || [r.id];
   const list = ids.map((i) => byId.get(i)).filter(Boolean);
-  if (list.length < 2) return `<h4>Order ${esc(fmtOrder(r.order) || '–')}</h4><div class="empty">Geen andere klachten op dit order.</div>`;
+  if (list.length < 2) return `<h4>${esc(t('order'))} ${esc(fmtOrder(r.order) || '–')}</h4><div class="empty">${esc(t('noOtherOnOrder'))}</div>`;
   // groepeer per dossier (probleem), dossiers in volgorde van hun eerste klacht
   const groups = new Map();
   for (const x of list.sort((a, b) => a.d - b.d || a.id - b.id)) { let g = groups.get(x.dos); if (!g) groups.set(x.dos, (g = [])); g.push(x); }
@@ -1086,10 +1094,10 @@ function dossierHtml(r) {
   for (const g of groups.values()) {
     const c = DOS_COLORS[gi % DOS_COLORS.length]; gi++;
     const gc = g.reduce((t, x) => t + x.cost, 0);
-    html += `<div class="dos-group" style="border-left:6px solid ${c}"><div class="dos-head">Probleem ${gi} · ${g.length} klacht${g.length === 1 ? '' : 'en'}${g.length > 1 ? ` (${g.length - 1} vervolg)` : ''}${gc ? ' · ' + eur.format(gc) : ''}</div>` +
-      g.map((x) => `<div class="dos-item${x.id === r.id ? ' cur' : ''}" data-id="${x.id}" title="Open klacht ${x.id}"><span>${fmtDate(x.d)}</span><span>${x.id}</span><span class="act">${esc(actieNaam(x.actie))}</span><span class="txt">${x.vervolg ? '↳ ' : ''}${esc(x.oms.replace(/\s+/g, ' ') || x.faseNaam)}</span></div>`).join('') + '</div>';
+    html += `<div class="dos-group" style="border-left:6px solid ${c}"><div class="dos-head">${esc(t('problemN', { n: gi }))} · ${esc(t(g.length === 1 ? 'nComplaint1' : 'nComplaints', { n: g.length }))}${g.length > 1 ? ` (${esc(t('nFollow', { n: g.length - 1 }))})` : ''}${gc ? ' · ' + eur.format(gc) : ''}</div>` +
+      g.map((x) => `<div class="dos-item${x.id === r.id ? ' cur' : ''}" data-id="${x.id}" title="${esc(t('complaintN', { n: x.id }))}"><span>${fmtDate(x.d)}</span><span>${x.id}</span><span class="act">${esc(actieNaam(x.actie))}</span><span class="txt">${x.vervolg ? '↳ ' : ''}${esc(x.oms.replace(/\s+/g, ' ') || x.faseNaam)}</span></div>`).join('') + '</div>';
   }
-  return `<h4>Order ${esc(fmtOrder(r.rootOrder))}: ${list.length} klachten · ${groups.size} probleem${groups.size === 1 ? '' : 'en'} (dossiers) · ${nIv} interventie${nIv === 1 ? '' : 's'} · totale klachtkost ${eur.format(cost)}</h4><div class="dos-list">${html}</div>`;
+  return `<h4>${esc(t('orderSummary', { o: fmtOrder(r.rootOrder), n: list.length, p: groups.size, i: nIv, c: eur.format(cost) }))}</h4><div class="dos-list">${html}</div>`;
 }
 function closeDetail() { $('modalBg').classList.remove('open'); }
 $('modalBg').addEventListener('click', (e) => { if (e.target === $('modalBg')) closeDetail(); });
@@ -1097,18 +1105,21 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetai
 
 /* ───────────── Export ───────────── */
 function exportXlsx() {
-  const rows = filtered.map((r) => ({
-    Klacht: r.id, Datum: fmtDate(r.d), Firma: r.firma, Klantnr: r.klnr, Klant: r.klantNaam, Land: r.land,
-    Productgroep: r.pgNaam, Productnr: r.prod, Product: r.prodNaam, Order: r.order || '',
-    NTR: r.ntr || '', 'NTR omschrijving': r.ntrNaam, 'NTR bevestigd': r.ntrBevestigd ? 'ja' : 'nee', Foutcode: r.fout || '', Fout: r.foutNaam,
-    'TREE 1': r.tree[0] || '', 'TREE 2': r.tree[1] || '', 'TREE 3': r.tree[2] || '',
-    Status: r.faseNaam, 'Uit te voeren actie': actieNaam(r.actie), Interventie: r.interv ? 'ja' : 'nee', Dossier: r.dos, 'Klachten in dossier': r.dosSize, Vervolgklacht: r.vervolg ? 'ja' : 'nee', 'Koppeling': r.vlink, 'Andere klacht op hetzelfde order': r.andereOpOrder ? 'ja' : 'nee', 'Oorspronkelijk order': fmtOrder(r.rootOrder), 'Dagen sinds vorige klacht': r.vgap ?? '', Open: r.open ? 'ja' : 'nee', 'Afgesloten op': fmtDate(r.dA), 'Doorlooptijd (d)': !r.open && r.dA >= r.d ? r.dA - r.d : '',
-    'Kost materiaal': r.costMat, 'Kost plaatsing': r.costPl, Vertegenwoordiger: r.vertNaam, Regio: `${r.regio} ${r.regioNaam}`.trim(), 'Behandeld door': r.beh,
-    Omschrijving: r.oms, 'Verwachte oplossing': r.opl, Oorzaak: r.oorz.map((o) => o.oorzaak).join(' | '),
-  }));
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Klachten');
-  XLSX.writeFile(wb, `Klachten_selectie_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  const X = [
+    ['colId', (r) => r.id], ['colDate', (r) => fmtDate(r.d)], ['xFirma', (r) => r.firma], ['xKlnr', (r) => r.klnr], ['lbl_klant', (r) => r.klantNaam], ['xLand', (r) => r.land],
+    ['lbl_pg', (r) => r.pgNaam], ['xProdnr', (r) => r.prod], ['lbl_prod', (r) => r.prodNaam], ['order', (r) => r.order || ''],
+    ['colNtr', (r) => r.ntr || ''], ['xNtrOms', (r) => (r.ntr ? r.ntrNaam : t('ntrMissing'))], ['xNtrConf', (r) => yesNo(r.ntrBevestigd)], ['lbl_fout', (r) => r.fout || ''], ['xFout', (r) => r.foutNaam],
+    ['TREE 1', (r) => r.tree[0] || ''], ['TREE 2', (r) => r.tree[1] || ''], ['TREE 3', (r) => r.tree[2] || ''],
+    ['lbl_status', (r) => r.faseNaam], ['lbl_actie', (r) => actieNaam(r.actie)], ['xInterv', (r) => yesNo(r.interv)], ['xDossier', (r) => r.dos], ['xDosSize', (r) => r.dosSize],
+    ['sVervolg', (r) => yesNo(r.vervolg)], ['xLink', (r) => vlinkLabel(r.vlink)], ['sAnder', (r) => yesNo(r.andereOpOrder)], ['xRootOrder', (r) => fmtOrder(r.rootOrder)], ['xGap', (r) => r.vgap ?? ''],
+    ['open', (r) => yesNo(r.open)], ['dA', (r) => fmtDate(r.dA)], ['xLead', (r) => (!r.open && r.dA >= r.d ? r.dA - r.d : '')],
+    ['costMat', (r) => r.costMat], ['costPl', (r) => r.costPl], ['lbl_vert', (r) => r.vertNaam], ['lbl_regio', (r) => `${r.regio} ${r.regioNaam}`.trim()], ['handledBy', (r) => r.beh],
+    ['omsTitle', (r) => r.oms], ['oplTitle', (r) => r.opl], ['cause', (r) => r.oorz.map((o) => o.oorzaak).join(' | ')],
+  ];
+  const head = X.map(([k]) => (k.startsWith('TREE') ? k : t(k)));
+  const ws = XLSX.utils.aoa_to_sheet([head, ...filtered.map((r) => X.map(([, f]) => f(r)))]);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, t('sheetName'));
+  XLSX.writeFile(wb, `${t('fileName')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 /* ───────────── Periode-snelkeuze ───────────── */
@@ -1138,7 +1149,10 @@ $('logoutBtn').addEventListener('click', async () => { try { await apiRequest({ 
 document.querySelectorAll('select.ui-lang').forEach((sel) => sel.addEventListener('change', () => {
   saveUiLangSetting(sel.value); uiLangOverride = sel.value;
   applyI18n(); document.querySelectorAll('select.ui-lang').forEach(fillUiLangSelect);
+  setNumberLocale();
+  if (typeof refreshInfoButtons === 'function') refreshInfoButtons();
   if (ME) { $('topbarRole').textContent = roleLabel(ME.role); renderDataInfo(); if (ME.role === 'admin') showLastUpload(); }
+  if (DATA) { buildFilters(); update(); }
 }));
 $('dFrom').addEventListener('change', (e) => { F.from = dayFromIso(e.target.value); document.querySelectorAll('#quick button').forEach((b) => b.classList.remove('on')); UI.page = 0; update(); });
 $('dTo').addEventListener('change', (e) => { F.to = dayFromIso(e.target.value); document.querySelectorAll('#quick button').forEach((b) => b.classList.remove('on')); UI.page = 0; update(); });
@@ -1161,6 +1175,7 @@ $('treeLevel').addEventListener('change', (e) => { UI.treeLevel = +e.target.valu
 $('exportBtn').addEventListener('click', exportXlsx);
 
 /* ───────────── Start ───────────── */
+setNumberLocale();
 applyI18n();
 document.querySelectorAll('select.ui-lang').forEach(fillUiLangSelect);
 tryRestoreSession();
