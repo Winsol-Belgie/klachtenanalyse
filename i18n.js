@@ -1465,6 +1465,13 @@ Object.assign(I18N.de, { finEvolNoteKlant: "Umsatz pro Kunde gibt es nur pro Jah
 Object.assign(I18N.es, { finEvolNoteKlant: "La facturación por cliente solo existe por año: las reclamaciones se toman entonces también por año completo, independientemente del filtro de periodo." });
 Object.assign(I18N.it, { finEvolNoteKlant: "Il fatturato per cliente esiste solo per anno: i reclami vengono quindi presi anch’essi per anno completo, indipendentemente dal filtro del periodo." });
 
+Object.assign(I18N.nl, {"finEvolNoteKlant": "Bij een klant bestaat de omzet enkel per jaar: de grafiek toont daarom alle jaren, per jaar. De kerncijfers en de tabel volgen de volledige jaren van de gekozen periode.", "finGranKlant": "Niet beschikbaar bij een gekozen klant: de omzet per klant bestaat enkel per jaar."});
+Object.assign(I18N.fr, {"finEvolNoteKlant": "Pour un client, le CA n’existe que par année : le graphique montre donc toutes les années, par année. Les chiffres clés et le tableau suivent les années complètes de la période choisie.", "finGranKlant": "Non disponible avec un client choisi : le CA par client n’existe que par année."});
+Object.assign(I18N.en, {"finEvolNoteKlant": "For a customer, revenue only exists per year: the chart therefore shows all years, per year. The key figures and the table follow the full years of the chosen period.", "finGranKlant": "Not available with a customer selected: revenue per customer only exists per year."});
+Object.assign(I18N.de, {"finEvolNoteKlant": "Bei einem Kunden gibt es den Umsatz nur pro Jahr: das Diagramm zeigt daher alle Jahre, pro Jahr. Kennzahlen und Tabelle folgen den vollen Jahren des gewählten Zeitraums.", "finGranKlant": "Nicht verfügbar bei gewähltem Kunden: Umsatz pro Kunde gibt es nur pro Jahr."});
+Object.assign(I18N.es, {"finEvolNoteKlant": "Para un cliente la facturación solo existe por año: el gráfico muestra por eso todos los años, por año. Las cifras clave y la tabla siguen los años completos del periodo elegido.", "finGranKlant": "No disponible con un cliente elegido: la facturación por cliente solo existe por año."});
+Object.assign(I18N.it, {"finEvolNoteKlant": "Per un cliente il fatturato esiste solo per anno: il grafico mostra quindi tutti gli anni, per anno. Le cifre chiave e la tabella seguono gli anni completi del periodo scelto.", "finGranKlant": "Non disponibile con un cliente scelto: il fatturato per cliente esiste solo per anno."});
+
 // ---------------------------------------------------------- logica
 function detectBrowserLang() {
   const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'nl'];

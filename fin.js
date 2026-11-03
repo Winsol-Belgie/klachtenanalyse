@@ -156,12 +156,22 @@ function renderFin() {
 
   // ── Evolutie ──
   const gran = mode === 'prod' ? UI.finGran : 'Y';
-  document.querySelectorAll('#segFinGran button').forEach((b) => { b.classList.toggle('on', b.dataset.v === gran); b.disabled = mode !== 'prod' && b.dataset.v !== 'Y'; });
+  document.querySelectorAll('#segFinGran button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.v === gran); b.disabled = mode !== 'prod' && b.dataset.v !== 'Y';
+    b.title = b.disabled ? t('finGranKlant') : '';
+  });
+  // Bij een klant (omzet enkel per jaar) toont de grafiek alle jaren, niet enkel de gekozen periode.
+  let RC = R, chartRows = rows;
+  if (mode !== 'prod') {
+    const all = DATA.rows.filter((r) => matches(r, 'period'));
+    let y0 = Infinity, y1 = -Infinity; for (const r of DATA.rows) { const y = new Date(r.d * 864e5).getUTCFullYear(); if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    RC = { m0: y0 * 12, m1: y1 * 12 + 11, y0, y1 }; chartRows = all;
+  }
   const keyOf = (mi) => { const y = Math.floor(mi / 12), m = mi % 12; return gran === 'Y' ? String(y) : gran === 'Q' ? `${y}-${t('qShort')}${Math.floor(m / 3) + 1}` : `${y}-${String(m + 1).padStart(2, '0')}`; };
-  const keys = []; for (let mi = R.m0; mi <= R.m1; mi++) { const k = keyOf(mi); if (keys[keys.length - 1] !== k) keys.push(k); }
+  const keys = []; for (let mi = RC.m0; mi <= RC.m1; mi++) { const k = keyOf(mi); if (keys[keys.length - 1] !== k) keys.push(k); }
   const byKey = new Map(keys.map((k) => [k, []]));
-  for (const r of rows) { const l = byKey.get(keyOf(monthIdx(r.d))); if (l) l.push(r); }
-  const denP = finDenom(mode, R, keyOf).per;
+  for (const r of chartRows) { const l = byKey.get(keyOf(monthIdx(r.d))); if (l) l.push(r); }
+  const denP = finDenom(mode, RC, keyOf).per;
   const prettyK = (k) => (gran === 'M' ? midxLabel(Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) : k);
   const serRatio = [], serCost = [], cnt = [];
   for (const k of keys) {
