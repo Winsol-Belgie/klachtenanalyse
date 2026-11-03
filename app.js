@@ -912,7 +912,7 @@ function splitKeys(r) {
   }
 }
 function renderTrend() {
-  if (UI.mode === 'cumul') return renderCumul();
+  if (UI.mode === 'cumul' || UI.mode === 'abs') return renderCumul(UI.mode === 'abs');
   if (UI.mode === 'qual') return renderQual();
   const keys = periodRange();
   const pos = new Map(keys.map((k, i) => [k, i]));
@@ -1013,7 +1013,8 @@ function renderQual() {
   $('legend').innerHTML = ds.map((d) => `<span><i style="background:${d.borderColor}"></i>${esc(d.label)}</span>`).join('') + `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
 }
 
-function renderCumul() {
+// Jaren cumulatief (opgeteld) of Jaren absoluut (abs = per week/maand, niet opgeteld): één lijn per jaar, jan–dec.
+function renderCumul(abs) {
   const rows = DATA.rows.filter((r) => matches(r, 'period'));
   const nSlots = UI.cumGran === 'M' ? 12 : 53;
   const labels = UI.cumGran === 'M' ? MONTHS() : Array.from({ length: 53 }, (_, i) => String(i + 1));
@@ -1028,19 +1029,20 @@ function renderCumul() {
   const [curY, curI] = yearSlot(maxD);
   const years = [...per.keys()].sort((a, b) => a - b);
   const cum = (a, upto) => { let t = 0; return a.map((v, i) => (i > upto ? null : (t += v))); };
-  const series = years.map((y) => ({ y, data: cum(per.get(y), y === curY ? curI : nSlots - 1) }));
+  const plain = (a, upto) => a.map((v, i) => (i > upto ? null : v));
+  const series = years.map((y) => ({ y, data: (abs ? plain : cum)(per.get(y), y === curY ? curI : nSlots - 1) }));
   // kleuren volgen het jaar (niet de volgorde in de selectie), zodat een jaar altijd dezelfde kleur houdt
   const colorOf = (y) => (y === curY ? '#111111' : COLORS[((y - 2020) % COLORS.length + COLORS.length) % COLORS.length]);
   const ds = series.map((s) => ({
     key: String(s.y), label: String(s.y), data: s.data, borderColor: colorOf(s.y), backgroundColor: colorOf(s.y),
     borderWidth: s.y === curY ? 3 : 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false,
   }));
-  const notes = [t('noteCumul')];
-  if (UI.target && per.has(curY - 1)) {
+  const notes = [t('noteCumul')]; if (abs) notes.push(t('noteAbs'));
+  if (!abs && UI.target && per.has(curY - 1)) {
     const f = 1 + Number(UI.target) / 100;
     const prev = cum(per.get(curY - 1), nSlots - 1).map((v) => (v == null ? null : Math.round(v * f * 100) / 100));
     ds.push({ key: 'doel', label: t('targetLbl', { y: curY, p: UI.target, py: curY - 1 }), data: prev, borderColor: '#e34948', backgroundColor: '#e34948', borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 });
-  } else if (UI.target) notes.push(t('noTargetData', { y: curY - 1 }));
+  } else if (!abs && UI.target) notes.push(t('noTargetData', { y: curY - 1 }));
   const isCost = UI.measure === 'cost';
   if (chart) chart.destroy();
   chart = new Chart($('trend'), {
@@ -1054,14 +1056,14 @@ function renderCumul() {
         tooltip: {
           backgroundColor: '#111', padding: 10, boxPadding: 4, filter: (c) => c.raw != null,
           callbacks: {
-            title: (c) => (UI.cumGran === 'M' ? t('uptoMonth', { m: c[0].label }) : t('uptoWeek', { w: c[0].label })),
+            title: (c) => (abs ? (UI.cumGran === 'M' ? c[0].label : t('week') + ' ' + c[0].label) : UI.cumGran === 'M' ? t('uptoMonth', { m: c[0].label }) : t('uptoWeek', { w: c[0].label })),
             label: (c) => ` ${c.dataset.label}: ${isCost ? eur.format(c.raw) : nf.format(c.raw)}`,
           },
         },
       },
       scales: {
         x: { grid: { display: false }, title: { display: true, text: UI.cumGran === 'M' ? t('month') : t('week'), color: '#6b7280' }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
-        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: isCost ? t('cumCost') : t('cumCount'), color: '#6b7280' }, ticks: { color: '#6b7280', precision: 0, callback: (v) => (isCost ? eur.format(v) : nf.format(v)) } },
+        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: abs ? (isCost ? t('ntrCost') : t('absCount')) : isCost ? t('cumCost') : t('cumCount'), color: '#6b7280' }, ticks: { color: '#6b7280', precision: 0, callback: (v) => (isCost ? eur.format(v) : nf.format(v)) } },
       },
     },
   });
@@ -1071,12 +1073,12 @@ function renderCumul() {
     `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
   $('legend').querySelectorAll('input[data-yr]').forEach((cb) => cb.addEventListener('change', () => {
     if (cb.checked) HIDDEN_YEARS.delete(cb.dataset.yr); else HIDDEN_YEARS.add(cb.dataset.yr);
-    saveHidden(); renderCumul();
+    saveHidden(); renderTrend();
   }));
   $('legend').querySelectorAll('.yr-q').forEach((b) => b.addEventListener('click', () => {
     HIDDEN_YEARS = new Set();
     if (b.dataset.q === '3') years.slice(0, -3).forEach((y) => HIDDEN_YEARS.add(String(y)));
-    saveHidden(); renderCumul();
+    saveHidden(); renderTrend();
   }));
 }
 
@@ -1260,10 +1262,11 @@ $('fVervolg').addEventListener('change', (e) => { F.vervolg = e.target.value; UI
 let tmr; $('fText').addEventListener('input', (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.text = e.target.value.trim(); F.textLc = F.text.toLowerCase(); UI.page = 0; update(); }, 250); });
 const seg = (id, key) => $(id).addEventListener('click', (e) => { const v = e.target.dataset.v; if (!v) return; UI[key] = v; $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v)); renderTrend(); });
 seg('segGran', 'gran'); seg('segMeasure', 'measure'); seg('segCumGran', 'cumGran');
+function syncModeCtrls() { document.querySelectorAll('[data-modes]').forEach((el) => { el.hidden = !el.dataset.modes.split(' ').includes(UI.mode); }); }
 $('segMode').addEventListener('click', (e) => {
   const v = e.target.dataset.v; if (!v) return; UI.mode = v;
   $('segMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  document.querySelectorAll('[data-modes]').forEach((el) => { el.hidden = !el.dataset.modes.split(' ').includes(v); });
+  syncModeCtrls();
   renderTrend();
 });
 $('targetPct').addEventListener('change', (e) => { UI.target = e.target.value; renderTrend(); });

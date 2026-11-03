@@ -136,6 +136,7 @@ async function makePdfReport() {
       { mode: 'time', title: t('modeTime') + (UI.split ? ' – ' + $('splitBy').selectedOptions[0].text : '') + ' (' + (UI.measure === 'cost' ? t('ntrCost') : t('count')) + ')' },
       { mode: 'qual', title: t('modeQual') },
       { mode: 'cumul', title: t('modeCumul') + ' (' + (UI.measure === 'cost' ? t('ntrCost') : t('count')) + ')' },
+      { mode: 'abs', title: t('modeAbs') + ' (' + (UI.measure === 'cost' ? t('ntrCost') : t('count')) + ')' },
     ];
     let first = true;
     for (const c of charts) {

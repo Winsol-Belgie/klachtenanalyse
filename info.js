@@ -154,8 +154,8 @@ const INFO = {
     let: 'De laatste periode is meestal nog niet volledig en ligt daarom lager.',
   },
   mode: {
-    t: 'Grafiek: tijdlijn of jaren cumulatief',
-    wat: '<b>Tijdlijn</b>: de gekozen periode van links naar rechts, met het aantal (of de kost) per maand, kwartaal of jaar.<br><b>Interventie &amp; vervolg</b>: per maand, kwartaal of jaar het aandeel klachten met interventie en het aandeel vervolgklachten.<br><b>Jaren cumulatief</b>: één lijn per jaar, van januari tot december, waarbij elke week (of maand) wordt opgeteld bij de vorige. Zo zie je in één oogopslag of een jaar sneller of trager oploopt dan de vorige jaren.',
+    t: 'Grafiek: tijdlijn, jaren cumulatief of absoluut',
+    wat: '<b>Tijdlijn</b>: de gekozen periode van links naar rechts, met het aantal (of de kost) per maand, kwartaal of jaar.<br><b>Interventie &amp; vervolg</b>: per maand, kwartaal of jaar het aandeel klachten met interventie en het aandeel vervolgklachten.<br><b>Jaren cumulatief</b>: één lijn per jaar, van januari tot december, waarbij elke week (of maand) wordt opgeteld bij de vorige. Zo zie je in één oogopslag of een jaar sneller of trager oploopt dan de vorige jaren.<br><b>Jaren absoluut</b>: ook één lijn per jaar van januari tot december, maar per week (of maand) zonder optellen. Zo vergelijk je dezelfde periode van verschillende jaren.',
     bron: ['Datum van de klacht: <code>KDATE</code> in <code>' + SRC + '</code>.'],
     let: 'In "Jaren cumulatief" wordt de periodefilter genegeerd (alle andere filters gelden wel), want elk jaar wordt volledig getoond. Het lopende jaar stopt bij de laatste klacht in de data. Weken tellen vanaf 1 januari (dag 1–7 = week 1); dit zijn geen ISO-weken. Met de vinkjes onder de grafiek kies je welke jaren getoond worden; je keuze wordt in deze browser onthouden.',
   },

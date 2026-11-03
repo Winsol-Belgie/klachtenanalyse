@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Winsol Klachtenanalyse</title>
   <!-- Zelfde huisstijl als de Presentatievertaler en de Meeting Report Generator -->
-  <link rel="stylesheet" href="styles.css?v=202611041300" />
+  <link rel="stylesheet" href="styles.css?v=202611041400" />
   <style>
     .container { max-width: 1280px; }
     .step-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--brand); border-radius:50%; font-size:0.75rem; font-weight:700; color:#111; flex-shrink:0; }
@@ -96,6 +96,7 @@
     .seg button + button { border-left:1px solid var(--border); }
     .seg button.on { background:var(--brand); }
     .chart-ctrl [hidden] { display:none; }
+    .chart-ctrl > .slot-per { min-width:220px; }
     .chart-box { position:relative; height:340px; }
     .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:0.78rem; color:#444; }
     .legend span { display:inline-flex; align-items:center; gap:6px; }
@@ -353,19 +354,16 @@
       <div class="chart-ctrl">
         <div>
           <label class="field-label" data-info="mode"><span data-i18n="lbl_mode">Grafiek</span></label>
-          <div class="seg" id="segMode"><button data-v="time" class="on" data-i18n="modeTime">Tijdlijn</button><button data-v="cumul" data-i18n="modeCumul">Jaren cumulatief</button><button data-v="qual" data-i18n="modeQual">Interventie &amp; vervolg</button></div>
+          <div class="seg" id="segMode"><button data-v="time" class="on" data-i18n="modeTime">Tijdlijn</button><button data-v="cumul" data-i18n="modeCumul">Jaren cumulatief</button><button data-v="abs" data-i18n="modeAbs">Jaren absoluut</button><button data-v="qual" data-i18n="modeQual">Interventie &amp; vervolg</button></div>
         </div>
-        <div data-modes="time qual">
+        <div class="slot-per">
           <label class="field-label" data-i18n="per">Per</label>
-          <div class="seg" id="segGran"><button data-v="M" class="on" data-i18n="month">Maand</button><button data-v="Q" data-i18n="quarter">Kwartaal</button><button data-v="Y" data-i18n="year">Jaar</button></div>
+          <div class="seg" id="segGran" data-modes="time qual"><button data-v="M" class="on" data-i18n="month">Maand</button><button data-v="Q" data-i18n="quarter">Kwartaal</button><button data-v="Y" data-i18n="year">Jaar</button></div>
+          <div class="seg" id="segCumGran" data-modes="cumul abs" hidden><button data-v="W" class="on" data-i18n="week">Week</button><button data-v="M" data-i18n="month">Maand</button></div>
         </div>
-        <div data-modes="time cumul">
+        <div data-modes="time cumul abs">
           <label class="field-label" data-i18n="measure">Maat</label>
           <div class="seg" id="segMeasure"><button data-v="n" class="on" data-i18n="count">Aantal</button><button data-v="cost" data-i18n="ntrCost">NTR-kost</button></div>
-        </div>
-        <div data-modes="cumul" hidden>
-          <label class="field-label" data-i18n="per">Per</label>
-          <div class="seg" id="segCumGran"><button data-v="W" class="on" data-i18n="week">Week</button><button data-v="M" data-i18n="month">Maand</button></div>
         </div>
         <div class="only-cumul" hidden>
           <label class="field-label" data-info="target"><span data-i18n="lbl_target">Doel huidig jaar</span></label>
@@ -495,11 +493,11 @@
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/chart.umd.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
-<script src="i18n.js?v=202611041300"></script>
-<script src="app.js?v=202611041300"></script>
-<script src="info.js?v=202611041300"></script>
-<script src="info-i18n.js?v=202611041300"></script>
-<script src="fin.js?v=202611041300"></script>
-<script src="report.js?v=202611041300"></script>
+<script src="i18n.js?v=202611041400"></script>
+<script src="app.js?v=202611041400"></script>
+<script src="info.js?v=202611041400"></script>
+<script src="info-i18n.js?v=202611041400"></script>
+<script src="fin.js?v=202611041400"></script>
+<script src="report.js?v=202611041400"></script>
 </body>
 </html>
