@@ -1100,7 +1100,9 @@ function topBy(fn, n = 10) {
   for (const r of filtered) for (const k of fn(r)) { if (!k) continue; const e = m.get(k[0]); if (e) e.n++; else m.set(k[0], { key: k[0], label: k[1], n: 1 }); }
   return [...m.values()].sort((a, b) => b.n - a.n).slice(0, n);
 }
-function addFilter(key, v) { F[key].add(String(v)); MS[key].syncBtn(); UI.page = 0; update(); }
+// Klik op een rij/balk = inzoomen: de filter wordt vervangen door enkel die waarde
+// (toevoegen deed niets als de waarde al in een gekozen groep zat, bv. preset Winsol).
+function addFilter(key, v) { F[key].clear(); F[key].add(String(v)); MS[key].syncBtn(); UI.page = 0; update(); }
 function renderTops() {
   const total = filtered.length;
   const lv = UI.treeLevel;
