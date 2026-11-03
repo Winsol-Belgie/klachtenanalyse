@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Winsol Klachtenanalyse</title>
   <!-- Zelfde huisstijl als de Presentatievertaler en de Meeting Report Generator -->
-  <link rel="stylesheet" href="styles.css?v=202611031000" />
+  <link rel="stylesheet" href="styles.css?v=202611041000" />
   <style>
     .container { max-width: 1280px; }
     .step-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--brand); border-radius:50%; font-size:0.75rem; font-weight:700; color:#111; flex-shrink:0; }
@@ -156,6 +156,23 @@
     .ibtn { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; margin-left:6px; padding:0; border-radius:50%; border:1px solid #c9ccd1; background:#fff; color:#6b7280; font:italic 700 10px/1 Georgia, serif; vertical-align:1px; cursor:pointer; }
     .ibtn:hover, .ibtn.on { background:var(--brand); border-color:var(--brand); color:#111; }
     .stat .ibtn { vertical-align:0; }
+    /* Rapportkeuze (tabs) */
+    .rep-tabs { display:flex; gap:4px; margin:4px 0 14px; border-bottom:2px solid var(--border); flex-wrap:wrap; }
+    .rep-tabs button { background:none; border:none; border-radius:8px 8px 0 0; padding:10px 18px; font-size:0.9rem; font-weight:700; color:var(--muted); margin-bottom:-2px; border-bottom:3px solid transparent; }
+    .rep-tabs button:hover { color:var(--text); background:#fafafa; }
+    .rep-tabs button.on { color:var(--text); border-bottom-color:var(--brand); }
+    .rep[hidden] { display:none; }
+    /* Financieel */
+    .fin-ctrl { display:flex; gap:18px; align-items:flex-end; flex-wrap:wrap; }
+    .fin-note { flex:1; min-width:260px; margin:0; font-size:0.78rem; color:#6b7280; }
+    .fin-note b { color:#b45309; }
+    .fin-kpi { grid-template-columns:repeat(3, minmax(0,1fr)); }
+    @media (max-width: 900px) { .fin-kpi { grid-template-columns:1fr; } }
+    .stat .calc { display:block; margin-top:6px; font-size:0.72rem; color:#6b7280; line-height:1.35; }
+    .fin-tbl td, .fin-tbl th { font-variant-numeric:tabular-nums; }
+    .fin-sub { font-size:0.72rem; color:#6b7280; margin:6px 0 0; }
+    .fin-empty { font-size:0.85rem; color:#6b7280; }
+    .fin-tops { grid-template-columns:1fr; gap:22px; }
     #infoPop { position:absolute; z-index:400; display:none; width:min(440px, calc(100vw - 32px)); background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 36px rgba(0,0,0,.16); padding:14px 16px; font-size:0.82rem; line-height:1.5; color:var(--text); }
     #infoPop.open { display:block; }
     #infoPop h4 { margin:0 0 6px; font-size:0.92rem; display:flex; align-items:center; gap:8px; }
@@ -312,6 +329,11 @@
       <div class="chips" id="chips"></div>
     </div>
 
+    <!-- RAPPORTKEUZE -->
+    <div class="rep-tabs" id="repTabs" role="tablist"></div>
+
+    <!-- ══ RAPPORT 1: KLACHTEN ══ -->
+    <div class="rep" id="rep_klachten">
     <!-- KPI -->
     <div class="stat-row">
       <div class="stat"><b id="kTotal">–</b><span data-info="kTotal"><span data-i18n="lbl_kTotal">Klachten</span></span></div>
@@ -400,6 +422,44 @@
       <div class="tbl-wrap"><table class="kl" id="tbl"></table></div>
       <div class="pager" id="pager"></div>
     </div>
+    </div>
+
+    <!-- ══ RAPPORT 2: FINANCIEEL ══ -->
+    <div class="rep" id="rep_fin" hidden>
+      <div class="ts-card fin-ctrl">
+        <div>
+          <label class="field-label" data-info="finTeller"><span data-i18n="finTellerLbl">Klachten tellen als</span></label>
+          <div class="seg" id="segFinTeller"><button data-v="orders" class="on" data-i18n="finTOrders">Orders met klacht</button><button data-v="dos" data-i18n="finTDos">Dossiers</button><button data-v="all" data-i18n="finTAll">Alle klachten</button></div>
+        </div>
+        <p class="fin-note" id="finNote"></p>
+      </div>
+      <div class="fin-empty ts-card" id="finEmpty" hidden></div>
+      <div id="finBody">
+        <div class="stat-row fin-kpi" id="finKpi"></div>
+        <div class="ts-card">
+          <h2 class="section-title"><span class="step-badge">2</span><span data-info="finEvol"><span data-i18n="finEvolTitle">Klachtratio en kost door de tijd</span></span></h2>
+          <div class="chart-ctrl">
+            <div>
+              <label class="field-label" data-i18n="per">Per</label>
+              <div class="seg" id="segFinGran"><button data-v="M" data-i18n="month">Maand</button><button data-v="Q" class="on" data-i18n="quarter">Kwartaal</button><button data-v="Y" data-i18n="year">Jaar</button></div>
+            </div>
+          </div>
+          <div class="chart-box"><canvas id="finChart"></canvas></div>
+          <div class="legend" id="finLegend"></div>
+        </div>
+        <div class="ts-card" id="finPgCard">
+          <h2 class="section-title"><span class="step-badge">3</span><span data-info="finTables"><span data-i18n="finPgTitle">Per productgroep</span></span><span class="grow"></span><span class="status" style="margin:0" data-i18n="finClickRow">Klik op een rij om erop te filteren.</span></h2>
+          <div class="tbl-wrap"><table class="kl fin-tbl" id="finPg"></table></div>
+        </div>
+        <div class="ts-card">
+          <h2 class="section-title"><span class="step-badge">4</span><span data-info="finTables"><span data-i18n="finTopTitle">Hoogste klachtkost t.o.v. omzet</span></span></h2>
+          <div class="tops fin-tops">
+            <div class="top-card"><h3 data-i18n="topKlant">Klanten</h3><div class="tbl-wrap"><table class="kl fin-tbl" id="finKlant"></table></div><p class="fin-sub" id="finKlantSub"></p></div>
+            <div class="top-card" id="finProdCard"><h3 data-i18n="topProd">Producten</h3><div class="tbl-wrap"><table class="kl fin-tbl" id="finProd"></table></div><p class="fin-sub" id="finProdSub"></p></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ══ ADMIN: KLACHTENDATA ══ -->
@@ -435,10 +495,11 @@
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/chart.umd.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
-<script src="i18n.js?v=202611031000"></script>
-<script src="app.js?v=202611031000"></script>
-<script src="info.js?v=202611031000"></script>
-<script src="info-i18n.js?v=202611031000"></script>
-<script src="report.js?v=202611031100"></script>
+<script src="i18n.js?v=202611041000"></script>
+<script src="app.js?v=202611041000"></script>
+<script src="info.js?v=202611041000"></script>
+<script src="info-i18n.js?v=202611041000"></script>
+<script src="fin.js?v=202611041000"></script>
+<script src="report.js?v=202611041000"></script>
 </body>
 </html>

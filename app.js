@@ -142,7 +142,11 @@ function findSheets(wb) {
       const kind = hdr.includes('KVOLGN') && hdr.includes('KDATE') ? 'klachten'
         : hdr.includes('TVOLGN') && hdr.includes('TTREEOM') ? 'tree'
         : hdr.includes('BVOLGN') ? 'oorzaak'
-        : hdr.includes('LTYPE') && hdr.includes('LCODE') ? 'lookup' : null;
+        : hdr.includes('LTYPE') && hdr.includes('LCODE') ? 'lookup'
+        : hdr.includes('OORNR') && hdr.includes('OBRON') ? 'orders'
+        : hdr.includes('VPROD') && hdr.includes('VMAAND') ? 'vprod'
+        : hdr.includes('VKLANT') && hdr.includes('VOMZET') ? 'vklant'
+        : hdr.includes('POORNR') && hdr.includes('POPLAA') ? 'plaatsers' : null;
       if (kind) {
         const idx = {}; hdr.forEach((h, j) => { idx[h] = j; });
         found[kind] = { idx, rows: rows.slice(i + 1) };
@@ -187,6 +191,51 @@ function buildData(sheets, fileName, fileDate) {
       const o = { oorzaak: txt(r[idx.OORZAAK]), corr: txt(r[idx.CORRIGEREND]), corrA: txt(r[idx.CORRECTIEF]) };
       if (!o.oorzaak && !o.corr && !o.corrA) continue;
       let a = oorz.get(k); if (!a) oorz.set(k, (a = [])); a.push(o);
+    }
+  }
+
+  // Orderkop (query 5): per order de eerste bron in de volgorde Winsol, Winbalu, Helios, Industries.
+  // (Een order van Winsol staat soms ook bij Helios als interne bestelling; die versie negeren we.)
+  const ORD = new Map();
+  if (sheets.orders) {
+    const { idx: oi, rows: orows } = sheets.orders;
+    const prio = { W: 1, B: 2, H: 3, I: 4 };
+    const ddmmyyyy = (v) => { const n = Math.round(num(v)); if (n < 1010000) return null; const y = n % 10000, m = Math.floor(n / 10000) % 100, d = Math.floor(n / 1000000); return m >= 1 && m <= 12 && d >= 1 && d <= 31 ? dayNum(new Date(y, m - 1, d)) : null; };
+    for (const r of orows) {
+      const o = num(r[oi.OORNR]); if (!o) continue;
+      const pr = prio[String(r[oi.OBRON] ?? '').trim()] || 9;
+      const cur = ORD.get(o); if (cur && cur.pr <= pr) continue;
+      const jj = num(r[oi.ODATJJ]), mm = num(r[oi.ODATMM]), dd = num(r[oi.ODATDD]);
+      ORD.set(o, {
+        pr, fakt: num(r[oi.OFAKTW]), plk: num(r[oi.OVOOPL]),
+        d: jj > 1900 && mm >= 1 && mm <= 12 && dd >= 1 ? dayNum(new Date(jj, mm - 1, dd)) : null,
+        dP: ddmmyyyy(r[oi.ODATPR]), dL: ddmmyyyy(r[oi.ODATLE]), dU: ddmmyyyy(r[oi.ODATUI]), lp: num(r[oi.OLEVPL]),
+      });
+    }
+  }
+  // Verkoop (query 6 en 7): compacte tabellen voor het rapport "Financieel".
+  let sales = null;
+  if (sheets.vprod) {
+    const { idx: vi, rows: vrows } = sheets.vprod;
+    const prod = [];
+    for (const r of vrows) {
+      const y = num(r[vi.VJAAR]), m = num(r[vi.VMAAND]); if (!y || !m) continue;
+      prod.push([y, m, num(r[vi.VPROD]), String(r[vi.VPG] ?? '').trim(), Math.round(num(r[vi.VOMZET]) * 100) / 100, num(r[vi.VAANTAL]), num(r[vi.VORDERS])]);
+    }
+    // namen van producten en productgroepen (ook voor producten zonder klacht)
+    const pn = {}, pgn = {};
+    for (const x of prod) { if (!(x[2] in pn)) pn[x[2]] = lk('PRODUCT', x[2]) || ''; if (!(x[3] in pgn)) pgn[x[3]] = lk('PG', x[3]) || ''; }
+    sales = { prod, pn, pgn };
+  }
+  let klantSales = null;
+  if (sheets.vklant) {
+    const { idx: ki, rows: krows } = sheets.vklant;
+    const PFX = { WV: 'W', BA: 'B', HE: 'H' };
+    klantSales = {};
+    for (const r of krows) {
+      const id = String(r[ki.VKLANT] ?? '').trim(); const f = PFX[id.slice(0, 2)]; if (!f) continue;
+      const key = `${f}-${num(id.slice(2))}`, y = num(r[ki.VJAAR]);
+      (klantSales[key] ||= {})[y] = [Math.round(num(r[ki.VOMZET]) * 100) / 100, num(r[ki.VORDERS])];
     }
   }
 
@@ -239,10 +288,12 @@ function buildData(sheets, fileName, fileDate) {
       tree: t,
       oorz: oorz.get(id) || [],
     });
+    const od = ORD.get(out[out.length - 1].order);
+    if (od) Object.assign(out[out.length - 1], { oFakt: od.fakt, oPlk: od.plk, oD: od.d, oDP: od.dP, oDL: od.dL, oDU: od.dU, oLp: od.lp });
   }
   if (!out.length) throw new Error('Geen klachten gevonden in het bestand.');
   linkDossiers(out);
-  return { rows: out, fileName, fileDate, loadedAt: Date.now() };
+  return { rows: out, sales, klantSales, fileName, fileDate, loadedAt: Date.now() };
 }
 
 /* ───────────── Toestand ───────────── */
@@ -250,7 +301,7 @@ let DATA = null;          // { rows, fileName, fileDate }
 const F = { from: null, to: null, pg: new Set(), prod: new Set(), tree: new Set(), ntr: new Set(), fout: new Set(), klant: new Set(), status: new Set(), vert: new Set(), regio: new Set(), open: '', info: 'excl', actie: new Set(), vervolg: '', text: '' };
 let HIDDEN_YEARS = new Set(); try { HIDDEN_YEARS = new Set(JSON.parse(localStorage.getItem('kl_hiddenYears') || '[]')); } catch { /* geen opslag */ }
 const saveHidden = () => { try { localStorage.setItem('kl_hiddenYears', JSON.stringify([...HIDDEN_YEARS])); } catch { /* geen opslag */ } };
-const UI = { mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
+const UI = { report: 'klachten', finTeller: 'orders', finGran: 'Q', mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
 let filtered = [];
 let CHIPS = []; // labels van de actieve filters (ook voor het PDF-rapport)
 let chart = null;
@@ -271,6 +322,7 @@ const API_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://localhost:8787/'
   : 'https://klachtenanalyse.gwenn-vanthournout.workers.dev/';
 const TOKEN_KEY = 'klachtenanalyse_token';
+const SALES_VT = '999999'; // gereserveerd bloknummer voor de verkoop per product (geen echte VT)
 const PARALLEL = 6;
 let authToken = '';
 let ME = null; // { username, role, vts, regio }
@@ -336,13 +388,21 @@ async function loadFromServer(retry = true) {
       if (cached && cached.h === c.h) { parts[k] = cached.rows; }
       else {
         const res = await apiBinary('chunk_get', { vt });
-        const rows = JSON.parse(await gunzip(await res.arrayBuffer()));
-        DB.set('c:' + vt, { h: c.h, rows });
-        parts[k] = rows;
+        const payload = JSON.parse(await gunzip(await res.arrayBuffer()));
+        DB.set('c:' + vt, { h: c.h, rows: payload });
+        parts[k] = payload;
       }
       done++; setLoading(true, t('dataLoadingN', { done, total: vts.length }));
     });
-    applyData({ rows: parts.flat(), version: data.version, uploadedAt: data.uploadedAt, fileName: data.fileName });
+    // Een blok is een lijst klachten (oud formaat) of { rows, ks } / { sp } (sinds de verkoopdata).
+    const rows = [], klantSales = {}; let sp = null;
+    for (const p of parts) {
+      if (Array.isArray(p)) { rows.push(...p); continue; }
+      if (p.rows) rows.push(...p.rows);
+      if (p.ks) Object.assign(klantSales, p.ks);
+      if (p.sp) sp = p;
+    }
+    applyData({ rows, sales: { prod: sp ? sp.sp : null, pn: sp ? sp.pn || {} : {}, pgn: sp ? sp.pgn || {} : {}, klant: Object.keys(klantSales).length ? klantSales : null }, version: data.version, uploadedAt: data.uploadedAt, fileName: data.fileName });
     setStatus('');
   } catch (e) {
     console.error(e);
@@ -381,6 +441,7 @@ function applyData(data) {
   $('pdfBtn').disabled = false;
   if (F.from == null) quickPeriod('24');
   buildFilters();
+  renderTabs();
   update();
 }
 
@@ -473,17 +534,27 @@ async function prepareUpload(file) {
     for (const r of rows) { const vt = String(r.vert || 0); let l = byVt.get(vt); if (!l) byVt.set(vt, (l = [])); l.push(r); }
     const oldChunks = (META && META.available && META.chunks) || {};
     const chunks = {}, changed = [];
+    // Elk blok bevat de klachten van één VT + de omzet van de klanten in die klachten.
+    // De verkoop per product zit in een apart blok (SALES_VT) dat enkel admin en user mogen lezen.
+    const payloads = new Map();
     for (const [vt, list] of byVt) {
-      const json = JSON.stringify(list);
+      const ks = {};
+      if (built.klantSales) for (const r of list) if (built.klantSales[r.klant] && !ks[r.klant]) ks[r.klant] = built.klantSales[r.klant];
+      payloads.set(vt, { rows: list, ks });
+    }
+    if (built.sales) payloads.set(SALES_VT, { sp: built.sales.prod, pn: built.sales.pn, pgn: built.sales.pgn });
+    for (const [vt, payload] of payloads) {
+      const list = payload.rows || [];
+      const json = JSON.stringify(payload);
       const h = await sha(json);
       chunks[vt] = { n: list.length, h, bytes: (oldChunks[vt] && oldChunks[vt].h === h) ? oldChunks[vt].bytes : 0 };
-      if (!oldChunks[vt] || oldChunks[vt].h !== h) changed.push({ vt, json, rows: list });
+      if (!oldChunks[vt] || oldChunks[vt].h !== h) changed.push({ vt, json, payload });
     }
     const removedVts = Object.keys(oldChunks).filter((vt) => !chunks[vt]);
     PENDING = { chunks, changed, diff, fileName: file.name, fileDate: file.lastModified, nothing: !changed.length && !removedVts.length };
     $('dataDrop').classList.add('has-file');
     const same = rows.length - diff.new.length - diff.changed.length;
-    setMsg('diffStatus', PENDING.nothing ? esc(t('diffNothing')) : t('diffSummary', { n: nf.format(rows.length), new: nf.format(diff.new.length), changed: nf.format(diff.changed.length), removed: nf.format(diff.removed.length), same: nf.format(same), chunks: changed.length, total: byVt.size }), PENDING.nothing ? 'ok' : '');
+    setMsg('diffStatus', PENDING.nothing ? esc(t('diffNothing')) : t('diffSummary', { n: nf.format(rows.length), new: nf.format(diff.new.length), changed: nf.format(diff.changed.length), removed: nf.format(diff.removed.length), same: nf.format(same), chunks: changed.length, total: payloads.size }), PENDING.nothing ? 'ok' : '');
     $('uploadBtn').disabled = PENDING.nothing;
   } catch (e) {
     console.error(e);
@@ -511,7 +582,7 @@ async function doUpload() {
     if (handleAuthFailure(status)) return;
     if (!ok) throw new Error(data.error || t('unknownError'));
     // De opgeladen blokken meteen in de browseropslag zetten: niet opnieuw downloaden.
-    for (const c of P.changed) await DB.set('c:' + c.vt, { h: P.chunks[c.vt].h, rows: c.rows });
+    for (const c of P.changed) await DB.set('c:' + c.vt, { h: P.chunks[c.vt].h, rows: c.payload });
     PENDING = null; $('dataDrop').classList.remove('has-file');
     setMsg('diffStatus', esc(t('uploadDone', { n: nf.format(data.rows), new: nf.format(data.diff.new), changed: nf.format(data.diff.changed), removed: nf.format(data.diff.removed) })), 'ok');
     await loadFromServer();
@@ -716,8 +787,30 @@ function matches(r, skip) {
 function update() {
   if (!DATA) return;
   filtered = DATA.rows.filter((r) => matches(r));
-  renderChips(); renderKpi(); renderTrend(); renderTops(); renderTable();
+  renderChips();
+  activeReport().render();
 }
+
+/* ───────────── Rapporten ─────────────
+ * Elk rapport = één tabblad onder de filters. De filters gelden voor alle rapporten.
+ * Een nieuw rapport toevoegen: een <div class="rep" id="rep_<id>"> in index.html,
+ * een regel hieronder (id, titel-sleutel in i18n.js, render-functie, optioneel pdf-functie in report.js). */
+const REPORTS = [
+  { id: 'klachten', label: 'repKlachten', render: () => { renderKpi(); renderTrend(); renderTops(); renderTable(); } },
+  { id: 'fin', label: 'repFin', render: () => renderFin() },
+];
+try { const r = localStorage.getItem('kl_report'); if (REPORTS.some((x) => x.id === r)) UI.report = r; } catch { /* geen opslag */ }
+function activeReport() { return REPORTS.find((r) => r.id === UI.report) || REPORTS[0]; }
+function renderTabs() {
+  const cur = activeReport().id;
+  $('repTabs').innerHTML = REPORTS.map((r) => `<button type="button" role="tab" data-rep="${r.id}" class="${r.id === cur ? 'on' : ''}" aria-selected="${r.id === cur}">${esc(t(r.label))}</button>`).join('');
+  for (const r of REPORTS) $('rep_' + r.id).hidden = r.id !== cur;
+}
+$('repTabs').addEventListener('click', (e) => {
+  const id = e.target.dataset && e.target.dataset.rep; if (!id || id === UI.report) return;
+  UI.report = id; try { localStorage.setItem('kl_report', id); } catch { /* */ }
+  renderTabs(); update();
+});
 
 function renderChips() {
   const c = []; const add = (label, clear, tip, key) => c.push({ label, clear, tip, key });
@@ -1064,6 +1157,7 @@ function showDetail(id) {
     </div>
     <div class="dl">
       ${kv(t('lbl_pg'), r.pgNaam)}${kv(t('lbl_prod'), `${r.prodNaam} (${r.prod})`)}${kv(t('order'), fmtOrder(r.order) || '')}
+      ${r.oD != null ? kv(t('oDate'), fmtDate(r.oD)) + kv(t('oLev'), fmtDate(r.oDU || r.oDL)) + kv(t('oAge'), (r.oDU || r.oDL) && r.d >= (r.oDU || r.oDL) ? t('nDays', { n: r.d - (r.oDU || r.oDL) }) : '') + kv(t('oFakt'), r.oFakt ? eur.format(r.oFakt) : '') + kv(t('oPlk'), r.oPlk ? eur.format(r.oPlk) : '') + kv(t('oLp'), r.oLp === 2 ? t('actie2') : r.oLp === 1 ? t('actie1') : '') : ''}
       ${kv('NTR' + (r.ntr && !r.ntrBevestigd ? ' (' + t('presumed') + ')' : ''), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : t('missing'))}${kv(t('lbl_fout'), r.fout ? `${r.fout} – ${r.foutNaam}` : '')}${kv(t('ntrOrder'), fmtOrder(r.ntrOrder) || '')}
       ${kv(t('costMat'), r.costMat ? eur.format(r.costMat) : '')}${kv(t('costPl'), r.costPl ? eur.format(r.costPl) : '')}${kv(t('handledBy'), r.beh)}${kv(t('lbl_actie'), actieNaam(r.actie))}${kv(t('iFlag'), r.intervFlag === '1' || r.intervFlag === 'I' ? t('yes') + ' (' + r.intervFlag + ')' : t('no'))}${kv(t('sVervolg'), r.vervolg ? t('vvYes', { d: r.vgap, how: vlinkLabel(r.vlink) }) : r.andereOpOrder ? t('vvNoOther') : t('no'))}
       ${kv(t('lbl_vert'), r.vertNaam ? `${r.vertNaam} (${r.vert})` : r.vert)}${kv(t('lbl_regio'), `${r.regio} ${r.regioNaam}`)}${kv(t('leadTime'), !r.open && r.dA >= r.d ? t('nDays', { n: r.dA - r.d }) : '')}
@@ -1097,7 +1191,8 @@ function dossierHtml(r) {
     html += `<div class="dos-group" style="border-left:6px solid ${c}"><div class="dos-head">${esc(t('problemN', { n: gi }))} · ${esc(t(g.length === 1 ? 'nComplaint1' : 'nComplaints', { n: g.length }))}${g.length > 1 ? ` (${esc(t('nFollow', { n: g.length - 1 }))})` : ''}${gc ? ' · ' + eur.format(gc) : ''}</div>` +
       g.map((x) => `<div class="dos-item${x.id === r.id ? ' cur' : ''}" data-id="${x.id}" title="${esc(t('complaintN', { n: x.id }))}"><span>${fmtDate(x.d)}</span><span>${x.id}</span><span class="act">${esc(actieNaam(x.actie))}</span><span class="txt">${x.vervolg ? '↳ ' : ''}${esc(x.oms.replace(/\s+/g, ' ') || x.faseNaam)}</span></div>`).join('') + '</div>';
   }
-  return `<h4>${esc(t('orderSummary', { o: fmtOrder(r.rootOrder), n: list.length, p: groups.size, i: nIv, c: eur.format(cost) }))}</h4><div class="dos-list">${html}</div>`;
+  const root = byId.get(r.dos) || r; const fakt = root.order === r.rootOrder ? root.oFakt : list.find((x) => x.order === r.rootOrder && x.oFakt)?.oFakt;
+  return `<h4>${esc(t('orderSummary', { o: fmtOrder(r.rootOrder), n: list.length, p: groups.size, i: nIv, c: eur.format(cost) }))}${fakt ? esc(' · ' + t('oFaktPct', { f: eur.format(fakt), p: fpct((cost / fakt) * 100) })) : ''}</h4><div class="dos-list">${html}</div>`;
 }
 function closeDetail() { $('modalBg').classList.remove('open'); }
 $('modalBg').addEventListener('click', (e) => { if (e.target === $('modalBg')) closeDetail(); });
@@ -1152,7 +1247,7 @@ document.querySelectorAll('select.ui-lang').forEach((sel) => sel.addEventListene
   setNumberLocale();
   if (typeof refreshInfoButtons === 'function') refreshInfoButtons();
   if (ME) { $('topbarRole').textContent = roleLabel(ME.role); renderDataInfo(); if (ME.role === 'admin') showLastUpload(); }
-  if (DATA) { buildFilters(); update(); }
+  if (DATA) { buildFilters(); renderTabs(); update(); }
 }));
 $('dFrom').addEventListener('change', (e) => { F.from = dayFromIso(e.target.value); document.querySelectorAll('#quick button').forEach((b) => b.classList.remove('on')); UI.page = 0; update(); });
 $('dTo').addEventListener('change', (e) => { F.to = dayFromIso(e.target.value); document.querySelectorAll('#quick button').forEach((b) => b.classList.remove('on')); UI.page = 0; update(); });

@@ -84,7 +84,7 @@ async function makePdfReport() {
     /* ── Kop ── */
     doc.setFillColor(...PDF_YELLOW); doc.rect(0, 0, W, 3, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(17);
-    text('Winsol – ' + t('pdfTitle'), M, y + 8);
+    text('Winsol – ' + t('pdfTitle') + (UI.report === 'fin' ? ' – ' + t('repFin') : ''), M, y + 8);
     y += 13;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...PDF_GREY);
     const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0);
@@ -116,6 +116,7 @@ async function makePdfReport() {
     }
     y += 3;
 
+    if (UI.report === 'fin' && FIN) { pdfFin(doc, { text, h2, para, need, newPage, drawLegend, getY: () => y, setY: (v) => { y = v; } }); } else {
     /* ── Kerncijfers ── */
     h2(t('pdfKpi'));
     const kpis = ['kTotal', 'kOpen', 'kCost', 'kLead', 'kTree', 'kDos', 'kInterv', 'kVervolg', 'kAnder'].map((k) => ({ v: $(k).innerText.replace(/\s+/g, ' ').trim(), l: t('lbl_' + k) }));
@@ -223,6 +224,8 @@ async function makePdfReport() {
       y += 5;
     }
 
+    }
+
     /* ── Voettekst op elke pagina ── */
     const n = doc.getNumberOfPages();
     for (let i = 1; i <= n; i++) {
@@ -231,7 +234,7 @@ async function makePdfReport() {
       text(t('pdfSource'), M, H - 8);
       text(t('pdfPage', { p: i, n }), W - M, H - 8, { align: 'right' });
     }
-    doc.save(`${t('pdfFile')}_${now.toISOString().slice(0, 10)}.pdf`);
+    doc.save(`${t('pdfFile')}${UI.report === 'fin' ? '_' + t('repFin') : ''}_${now.toISOString().slice(0, 10)}.pdf`);
   } catch (e) {
     console.error(e);
     setStatus(t('pdfError', { msg: e.message }), true);
@@ -239,4 +242,65 @@ async function makePdfReport() {
     btn.disabled = false; btn.textContent = label;
   }
 }
+
+/* ── PDF-onderdelen van het rapport "Financieel" ── */
+function pdfFin(doc, P) {
+  const { W, M } = PDF; const CW = W - 2 * M;
+  let y = P.getY();
+  const sync = () => P.setY(y), pull = () => { y = P.getY(); };
+  P.para(FIN.note, 8, 90); pull(); y += 2; sync();
+  // kerncijfers met rekenregel
+  P.h2(t('pdfKpi')); pull();
+  const cols = 3, bw = (CW - (cols - 1) * 3) / cols, bh = 24;
+  P.need(Math.ceil(FIN.kpis.length / cols) * (bh + 3)); pull();
+  FIN.kpis.forEach((k, i) => {
+    const x = M + (i % cols) * (bw + 3), yy = y + Math.floor(i / cols) * (bh + 3);
+    doc.setDrawColor(225); doc.setFillColor(250, 250, 250); doc.roundedRect(x, yy, bw, bh, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(pdfTxt(k.v), x + 3, yy + 7);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_GREY);
+    const l1 = doc.splitTextToSize(pdfTxt(k.l), bw - 6); doc.text(l1, x + 3, yy + 11.5);
+    doc.setFontSize(6.6); doc.setTextColor(120); doc.text(doc.splitTextToSize(pdfTxt(k.c), bw - 6).slice(0, 3), x + 3, yy + 11.5 + l1.length * 3.2 + 1);
+  });
+  y += Math.ceil(FIN.kpis.length / cols) * (bh + 3) + 3; sync();
+  // grafiek
+  if (finChart) {
+    const c = $('finChart');
+    const tmp = document.createElement('canvas'); tmp.width = c.width; tmp.height = c.height;
+    const g = tmp.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, tmp.width, tmp.height); g.drawImage(c, 0, 0);
+    const ih = (CW * tmp.height) / tmp.width;
+    P.h2(t('finEvolTitle')); P.need(ih + 16); pull();
+    doc.addImage(tmp.toDataURL('image/png'), 'PNG', M, y, CW, ih, undefined, 'FAST'); y += ih + 1; sync();
+    P.drawLegend(finChart.data.datasets.map((d) => ({ label: String(d.label), color: d.borderColor, dash: !!d.borderDash })));
+    P.para(FIN.evolNote, 7.5, 110); pull(); y += 3; sync();
+  }
+  // tabellen
+  const table = (title, first, rows, sub) => {
+    P.need(40); pull(); y += 3; sync();
+    P.h2(title); pull();
+    const cw = [CW - 6 * 22, 22, 22, 22, 22, 22, 22];
+    const head = [first, ...FIN.head];
+    const hdr = () => {
+      doc.setFillColor(245, 245, 246); doc.rect(M, y, CW, 8, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.8); doc.setTextColor(60);
+      let x = M; head.forEach((h, i) => { const ls = doc.splitTextToSize(pdfTxt(h), cw[i] - 2).slice(0, 2); doc.text(ls, i ? x + cw[i] - 1 : x + 1, y + 3.2, i ? { align: 'right' } : undefined); x += cw[i]; });
+      y += 9;
+    };
+    hdr();
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2);
+    if (!rows.length) { doc.setTextColor(...PDF_GREY); doc.text(pdfTxt(t('noData')), M + 1, y + 3.4); y += 6; }
+    for (const r of rows) {
+      if (y + 5 > PDF.H - 16) { P.setY(y); P.newPage(); pull(); hdr(); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); }
+      const vals = [r.name, eur.format(r.om), nf.format(r.o), nf.format(r.te), fpct(r.ra), eur.format(r.c), fpct(r.kp)];
+      let x = M; doc.setTextColor(30);
+      vals.forEach((v, i) => { let s2 = pdfTxt(v); while (doc.getTextWidth(s2) > cw[i] - 2 && s2.length > 3) s2 = s2.slice(0, -2); doc.text(s2, i ? x + cw[i] - 1 : x + 1, y + 3.4, i ? { align: 'right' } : undefined); x += cw[i]; });
+      doc.setDrawColor(235); doc.line(M, y + 5, M + CW, y + 5); y += 5;
+    }
+    sync();
+    if (sub) { y += 1; sync(); P.para(sub, 7.5, 110); pull(); }
+  };
+  table(FIN.pgTitle, FIN.firstCol, FIN.pgRows, '');
+  table(t('finTopTitle') + ' – ' + t('topKlant'), t('lbl_klant'), FIN.klRows, FIN.klSub);
+  if (FIN.mode === 'prod') table(t('finTopTitle') + ' – ' + t('topProd'), t('lbl_prod'), FIN.prRows, FIN.prSub);
+}
+
 $('pdfBtn').addEventListener('click', makePdfReport);
