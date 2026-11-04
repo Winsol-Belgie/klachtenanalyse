@@ -779,6 +779,9 @@ function matches(r, skip) {
   }
   if (F.text) {
     const t = F.textLc;
+    // Ordernummer in eender welke notatie (67-02-0201-6, 67.02.0201.6, 670202016, ook een deel): zoekt in order en NTR-order.
+    const od = F.textOrd;
+    if (od && (String(r.order || '').includes(od) || String(r.ntrOrder || '').includes(od))) return true;
     if (!(r.oms.toLowerCase().includes(t) || r.opl.toLowerCase().includes(t) || r.oorz.some((o) => (o.oorzaak + ' ' + o.corr + ' ' + o.corrA).toLowerCase().includes(t)))) return false;
   }
   return true;
@@ -1259,7 +1262,7 @@ $('quick').addEventListener('click', (e) => { const q = e.target.dataset.q; if (
 $('fOpen').addEventListener('change', (e) => { F.open = e.target.value; UI.page = 0; update(); });
 $('fInfo').addEventListener('change', (e) => { F.info = e.target.value; UI.page = 0; update(); });
 $('fVervolg').addEventListener('change', (e) => { F.vervolg = e.target.value; UI.page = 0; update(); });
-let tmr; $('fText').addEventListener('input', (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.text = e.target.value.trim(); F.textLc = F.text.toLowerCase(); UI.page = 0; update(); }, 250); });
+let tmr; $('fText').addEventListener('input', (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.text = e.target.value.trim(); F.textLc = F.text.toLowerCase(); F.textOrd = /^[\d\s.\-\/]+$/.test(F.text) && F.text.replace(/\D/g, '').length >= 4 ? F.text.replace(/\D/g, '') : ''; UI.page = 0; update(); }, 250); });
 const seg = (id, key) => $(id).addEventListener('click', (e) => { const v = e.target.dataset.v; if (!v) return; UI[key] = v; $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v)); renderTrend(); });
 seg('segGran', 'gran'); seg('segMeasure', 'measure'); seg('segCumGran', 'cumGran');
 function syncModeCtrls() { document.querySelectorAll('[data-modes]').forEach((el) => { el.hidden = !el.dataset.modes.split(' ').includes(UI.mode); }); }

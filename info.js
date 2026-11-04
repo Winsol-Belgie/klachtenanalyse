@@ -115,7 +115,7 @@ const INFO = {
   },
   zoek: {
     t: 'Zoekterm',
-    wat: 'Zoekt de ingegeven tekst (hoofdletterongevoelig, ook midden in een woord) in de vrije tekst van de klacht.',
+    wat: 'Zoekt de ingegeven tekst (hoofdletterongevoelig, ook midden in een woord) in de vrije tekst van de klacht.<br>Een <b>ordernummer</b> mag in eender welke notatie: 67-02-0201-6, 67.02.0201.6 of 670202016 (ook een deel, bv. 67-02-0201). Dan worden ook de klachten op dat order en met dat NTR-order getoond.',
     bron: ['<code>KOPM</code> (omschrijving klacht) en <code>KOPL</code> (verwachte oplossing) in <code>' + SRC + '</code>.', 'Oorzaak, corrigerende en correctieve maatregel uit <code>OORDLIB.PFKLACHTBH</code> (<code>BOORZA</code>, <code>BCORRI</code>, <code>BCORRE</code>).'],
     let: 'Klachten worden in het Nederlands, Frans, Duits of Engels ingegeven: zoek eventueel ook op de Franse term (bv. "moteur" naast "motor").',
   },
