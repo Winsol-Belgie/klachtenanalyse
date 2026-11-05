@@ -18,7 +18,7 @@ const INFO = {
   },
   pg: {
     t: 'Productgroep',
-    wat: 'De productgroep die op de klacht ingevuld werd, bv. SO!, Luifels, Screens, Rolluiken, PVC-ramen. De knoppen Winsol, WinVista en WinBalu onderaan de lijst zetten in één klik een vaste set productgroepen aan.',
+    wat: 'De productgroep waar de klacht over gaat, volgens de verkoopindeling (zie ? Uitleg data), bv. SO!, Luifels, Screens, Rolluiken, PVC-ramen. De knoppen Winsol, WinVista en WinBalu onderaan de lijst zetten in één klik een vaste set productgroepen aan.',
     bron: ['Code: <code>KPROD</code> in <code>' + SRC + '</code> (bv. 4S, 4A, 2A).', 'Omschrijving: <code>WINSOLPRO.PFPRODGRO</code> (<code>KO_PG</code> → <code>OMS_PGN</code>).'],
     let: 'Op de AS400 staat "|" waar het merk "!" schrijft; de tool toont SO! en Z!P.',
   },
@@ -26,7 +26,7 @@ const INFO = {
     t: 'Product',
     wat: 'Het product (artikel) waarop de klacht betrekking heeft, bv. SO!Classic, Squaro, Solarfix.',
     bron: ['Code: <code>KARTNR</code> in <code>' + SRC + '</code> (artikelnummer, 3 cijfers).', 'Naam: <code>OARTLIB.PFPROD</code> (<code>PROD</code> → <code>PRODBN</code>, Nederlandse benaming).'],
-    let: 'Klachten via de webshop of op losse onderdelen staan vaak op een verzamelproduct zoals "WEBSHOP ARTIKEL HELIOS". Het eigenlijke product is dan niet gekend; gebruik TREE of de omschrijving om verder te zoeken.',
+    let: 'Klachten op een Diversen- of Webshop-artikel (bv. "WEBSHOP ARTIKEL HELIOS") krijgen het artikel van het order van de klacht, als dat gekend is. In het detail van de klacht zie je wat er oorspronkelijk op stond.',
   },
   tree: {
     t: 'TREE (defect)',
@@ -244,7 +244,7 @@ const HELP_NL = {
   tables: 'Gebruikte tabellen', thTable: 'AS400-tabel', thContent: 'Inhoud', thQuery: 'Query',
   tableDesc: ['Klachten: 1 rij per klacht (klant, product, NTR, status, datums, kosten, teksten)', 'TREE-paden per klacht (nachtelijke kopie uit WinPro)', 'Oorzaak, corrigerende en correctieve maatregel', 'Omschrijving NTR-codes', 'Omschrijving foutcodes', 'Omschrijving statussen', 'Omschrijving productgroepen', 'Productnamen', 'Namen vertegenwoordigers', "Namen regio's", 'Klantnamen en land (Winsol / Winbalu / Helios)'],
   rules: 'Regels die in de tool zelf vastliggen',
-  ruleList: ['Enkel klachten vanaf 1/1/2020.', 'Open / afgesloten volgens de status (afgesloten = A, W, I, O, Y).', 'Klachten "ter info" (status I en O) tellen standaard niet mee.', 'Interventie = uit te voeren actie "Interventie" (KLEVPL 4).', 'Vervolgklacht = zelfde probleem binnen 1 jaar: op het herstelorder van een vorige klacht, of op hetzelfde order met dezelfde TREE (niveau 3). Anders: andere klacht op hetzelfde order.', 'NTR- en foutcode: de bevestigde code, anders de vermoedelijke.', 'Bedragen zijn exclusief btw; bedragen boven € 100.000 of negatief tellen niet mee (invoerfouten).', 'TREE: niveau 1 tot 3, de rest als detailtekst; dubbele paden per klacht worden weggelaten.', "Rapport Financieel: de productgroep volgt de verkoopindeling van het product van de klacht. De productgroep op de klacht zelf wijkt daar soms van af (bv. Pergola Z!P wordt verkocht onder Outdoor living, klachten op \"Combiflex\" gaan over producten verkocht onder Rolluiken).", "Rapport Financieel: klachten op webshopartikels (bv. \"WEBSHOP ARTIKEL HELIOS\") komen uit alle productgroepen, maar die artikels worden verkocht onder Andere buitenzonwering of Diversen. Die twee groepen lijken daardoor slechter dan ze zijn."],
+  ruleList: ['Enkel klachten vanaf 1/1/2020.', 'Open / afgesloten volgens de status (afgesloten = A, W, I, O, Y).', 'Klachten "ter info" (status I en O) tellen standaard niet mee.', 'Interventie = uit te voeren actie "Interventie" (KLEVPL 4).', 'Vervolgklacht = zelfde probleem binnen 1 jaar: op het herstelorder van een vorige klacht, of op hetzelfde order met dezelfde TREE (niveau 3). Anders: andere klacht op hetzelfde order.', 'NTR- en foutcode: de bevestigde code, anders de vermoedelijke.', 'Bedragen zijn exclusief btw; bedragen boven € 100.000 of negatief tellen niet mee (invoerfouten).', 'TREE: niveau 1 tot 3, de rest als detailtekst; dubbele paden per klacht worden weggelaten.', "Productgroep en product = waar de klacht echt over gaat, volgens de verkoopindeling (de groep waaronder het product verkocht wordt). Zo komen NTR-kost en omzet in dezelfde productgroep. Bv. Pergola Z!P valt onder Outdoor living, Combiflex onder Rolluiken. Dit geldt in alle tabbladen.", "Klachten op Diversen- of Webshop-artikels (bv. \"DIVERSEN LUIFELS\", \"WEBSHOP ARTIKEL HELIOS\"), op een onbekend artikel of op een artikel dat onder Diversen verkocht wordt (bv. \"ALUCO - GLAS\") worden toegewezen in deze volgorde: 1) het artikel van het order van de klacht (bv. order met een LUNO → Luifels), 2) zonder bruikbaar order: de productgroep op de klacht, 3) anders blijft de klacht in Diversen (bv. Webshop Marketing: folders, brochures). In het detail van een klacht zie je hoe ze toegewezen werd en wat er oorspronkelijk op stond.", "De omzet blijft zoals hij geboekt is: verkopen van webshopartikels blijven in hun eigen productgroep, enkel de klachten worden verschoven."],
   foot: 'Klik op een <span class="ibtn" style="cursor:default">i</span> naast een veld voor de uitleg van dat veld.',
 };
 function showHelp() {

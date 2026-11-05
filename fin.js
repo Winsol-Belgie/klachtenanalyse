@@ -78,7 +78,8 @@ function finRows(mode) {
     const R = finRange(); const a = Date.UTC(R.y0, 0, 1) / 864e5, b = Date.UTC(R.y1, 11, 31) / 864e5;
     return DATA.rows.filter((r) => r.d >= a && r.d <= b && matches(r, 'period'));
   }
-  if (!F.pg.size) return filtered;
+  // Nieuwe data: r.pg is al de toegewezen productgroep (verkoopindeling) → gewoon de filter. Oude data: via de verkoopgroep van het product.
+  if (!F.pg.size || DATA.rows.some((r) => r.aVia)) return filtered;
   return DATA.rows.filter((r) => matches(r, 'pg') && F.pg.has(salesPg(r.prod)));
 }
 function klantKeys(mode) {
@@ -214,7 +215,7 @@ function renderFin() {
     pgTitle = t('finPgTitle');
     const sal = new Map();
     for (const x of S.prod) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const e = sal.get(x[3]) || [0, 0]; e[0] += x[4]; e[1] += x[6]; sal.set(x[3], e); }
-    const kl = new Map(); for (const r of rows) { const pg = salesPg(r.prod) || '–'; let l = kl.get(pg); if (!l) kl.set(pg, (l = [])); l.push(r); }
+    const kl = new Map(); for (const r of rows) { const pg = (r.aVia ? r.pg : salesPg(r.prod)) || '–'; let l = kl.get(pg); if (!l) kl.set(pg, (l = [])); l.push(r); }
     for (const pg of new Set([...sal.keys(), ...kl.keys()])) {
       const e = sal.get(pg) || [0, 0], l = kl.get(pg) || []; const c = l.reduce((s, r) => s + r.cost, 0), te = tellerOf(l);
       if (!e[0] && !l.length) continue;

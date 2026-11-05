@@ -84,6 +84,37 @@ function linkDossiers(rows) {
   }
   ORDERS = ORD;
 }
+/* Toegewezen product en productgroep (bij het inlezen, met de verkoopdata).
+ * De NTR-kost moet in de productgroep van het product waar de klacht over gaat, zodat kost en omzet bij elkaar passen.
+ * Productgroep = verkoopindeling (de groep waaronder het product verkocht wordt).
+ *  1. product    : het artikel van de klacht is een echt product → de verkoopgroep van dat product (bv. Pergola Z!P → Outdoor living)
+ *  2. order      : Diversen-/Webshop-artikel, onbekend artikel of artikel verkocht onder Diversen → het artikel van het order van de klacht
+ *  3. klacht-pg  : geen bruikbaar order → de productgroep op de klacht, omgezet naar de verkoopindeling
+ *  4. diversen   : ook dat lukt niet → blijft zoals het is (bv. Webshop Marketing: folders, brochures)
+ * Wat op de klacht staat, blijft bewaard in pgK/pgKNaam/prodK/prodKNaam. */
+const DIVERSEN_PG = '9';
+function assignProduct(rows, sales, lk) {
+  const w = new Map();
+  for (const x of sales.prod) { let m = w.get(x[2]); if (!m) w.set(x[2], (m = new Map())); m.set(x[3], (m.get(x[3]) || 0) + Math.abs(x[4]) + 1); }
+  const spg = new Map([...w].map(([p, m]) => [p, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+  const pName = (p) => sales.pn[p] || lk('PRODUCT', p) || '';
+  const generic = (p) => { if (!p || !spg.has(p) || spg.get(p) === DIVERSEN_PG) return true; const n = pName(p).toUpperCase(); return n.includes('DIVERS') || n.includes('WEBSHOP'); };
+  // productgroep op de klacht → verkoopgroep: de verkoopgroep die het vaakst voorkomt bij echte producten met die klacht-productgroep
+  const cnt = new Map();
+  for (const r of rows) { if (generic(r.prod) || !r.pg || r.pg === DIVERSEN_PG) continue; let m = cnt.get(r.pg); if (!m) cnt.set(r.pg, (m = new Map())); const g = spg.get(r.prod); m.set(g, (m.get(g) || 0) + 1); }
+  const pgMap = new Map([...cnt].map(([pg, m]) => [pg, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+  for (const r of rows) {
+    Object.assign(r, { pgK: r.pg, pgKNaam: r.pgNaam, prodK: r.prod, prodKNaam: r.prodNaam });
+    let pg, prod = r.prod, via;
+    if (!generic(r.prod)) { pg = spg.get(r.prod); via = 'product'; }
+    else if (r.oArt && !generic(r.oArt)) { prod = r.oArt; pg = spg.get(prod); via = 'order'; }
+    else if (pgMap.get(r.pg) && pgMap.get(r.pg) !== DIVERSEN_PG) { pg = pgMap.get(r.pg); via = 'klacht'; }
+    else { pg = spg.get(r.prod) || (pgMap.get(r.pg) || r.pg); via = 'diversen'; }
+    r.aVia = via;
+    if (pg !== r.pg) { r.pg = pg; r.pgNaam = sales.pgn[pg] || lk('PG', pg) || pg; }
+    if (prod !== r.prod) { r.prod = prod; r.prodNaam = pName(prod) || 'Product ' + prod; }
+  }
+}
 let ORDERS = new Map();
 let DOSSIERS = new Map();
 const isInterv = (v) => { const s = String(v ?? '').trim().toUpperCase(); return s !== '' && !['N', '0', 'NEE', 'NO'].includes(s); };
@@ -207,7 +238,7 @@ function buildData(sheets, fileName, fileDate) {
       const cur = ORD.get(o); if (cur && cur.pr <= pr) continue;
       const jj = num(r[oi.ODATJJ]), mm = num(r[oi.ODATMM]), dd = num(r[oi.ODATDD]);
       ORD.set(o, {
-        pr, fakt: num(r[oi.OFAKTW]), plk: num(r[oi.OVOOPL]),
+        pr, fakt: num(r[oi.OFAKTW]), plk: num(r[oi.OVOOPL]), art: oi.OARTNR != null ? num(r[oi.OARTNR]) : 0,
         d: jj > 1900 && mm >= 1 && mm <= 12 && dd >= 1 ? dayNum(new Date(jj, mm - 1, dd)) : null,
         dP: ddmmyyyy(r[oi.ODATPR]), dL: ddmmyyyy(r[oi.ODATLE]), dU: ddmmyyyy(r[oi.ODATUI]), lp: num(r[oi.OLEVPL]),
       });
@@ -289,9 +320,10 @@ function buildData(sheets, fileName, fileDate) {
       oorz: oorz.get(id) || [],
     });
     const od = ORD.get(out[out.length - 1].order);
-    if (od) Object.assign(out[out.length - 1], { oFakt: od.fakt, oPlk: od.plk, oD: od.d, oDP: od.dP, oDL: od.dL, oDU: od.dU, oLp: od.lp });
+    if (od) Object.assign(out[out.length - 1], { oFakt: od.fakt, oPlk: od.plk, oD: od.d, oDP: od.dP, oDL: od.dL, oDU: od.dU, oLp: od.lp, oArt: od.art });
   }
   if (!out.length) throw new Error('Geen klachten gevonden in het bestand.');
+  if (sales) assignProduct(out, sales, lk);
   linkDossiers(out);
   return { rows: out, sales, klantSales, fileName, fileDate, loadedAt: Date.now() };
 }
@@ -1163,7 +1195,7 @@ function showDetail(id) {
       <button class="btn-outline" id="mClose" type="button">${esc(t('close'))}</button>
     </div>
     <div class="dl">
-      ${kv(t('lbl_pg'), r.pgNaam)}${kv(t('lbl_prod'), `${r.prodNaam} (${r.prod})`)}${kv(t('order'), fmtOrder(r.order) || '')}
+      ${kv(t('lbl_pg'), r.pgNaam)}${kv(t('lbl_prod'), `${r.prodNaam} (${r.prod})`)}${r.aVia ? kv(t('aVia'), t('aVia_' + r.aVia)) + (r.aVia !== 'product' ? kv(t('aEntered'), `${r.prodKNaam} (${r.prodK}) · ${r.pgKNaam}`) : '') : ''}${kv(t('order'), fmtOrder(r.order) || '')}
       ${r.oD != null ? kv(t('oDate'), fmtDate(r.oD)) + kv(t('oLev'), fmtDate(r.oDU || r.oDL)) + kv(t('oAge'), (r.oDU || r.oDL) && r.d >= (r.oDU || r.oDL) ? t('nDays', { n: r.d - (r.oDU || r.oDL) }) : '') + kv(t('oFakt'), r.oFakt ? eur.format(r.oFakt) : '') + kv(t('oPlk'), r.oPlk ? eur.format(r.oPlk) : '') + kv(t('oLp'), r.oLp === 2 ? t('actie2') : r.oLp === 1 ? t('actie1') : '') : ''}
       ${kv('NTR' + (r.ntr && !r.ntrBevestigd ? ' (' + t('presumed') + ')' : ''), r.ntr ? `${r.ntr} – ${r.ntrNaam}` : t('missing'))}${kv(t('lbl_fout'), r.fout ? `${r.fout} – ${r.foutNaam}` : '')}${kv(t('ntrOrder'), fmtOrder(r.ntrOrder) || '')}
       ${kv(t('costMat'), r.costMat ? eur.format(r.costMat) : '')}${kv(t('costPl'), r.costPl ? eur.format(r.costPl) : '')}${kv(t('handledBy'), r.beh)}${kv(t('lbl_actie'), actieNaam(r.actie))}${kv(t('iFlag'), r.intervFlag === '1' || r.intervFlag === 'I' ? t('yes') + ' (' + r.intervFlag + ')' : t('no'))}${kv(t('sVervolg'), r.vervolg ? t('vvYes', { d: r.vgap, how: vlinkLabel(r.vlink) }) : r.andereOpOrder ? t('vvNoOther') : t('no'))}
@@ -1209,7 +1241,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetai
 function exportXlsx() {
   const X = [
     ['colId', (r) => r.id], ['colDate', (r) => fmtDate(r.d)], ['xFirma', (r) => r.firma], ['xKlnr', (r) => r.klnr], ['lbl_klant', (r) => r.klantNaam], ['xLand', (r) => r.land],
-    ['lbl_pg', (r) => r.pgNaam], ['xProdnr', (r) => r.prod], ['lbl_prod', (r) => r.prodNaam], ['order', (r) => r.order || ''],
+    ['lbl_pg', (r) => r.pgNaam], ['xProdnr', (r) => r.prod], ['lbl_prod', (r) => r.prodNaam], ['aVia', (r) => (r.aVia ? t('aVia_' + r.aVia) : '')], ['xPgK', (r) => r.pgKNaam ?? r.pgNaam], ['xProdK', (r) => r.prodKNaam ?? r.prodNaam], ['order', (r) => r.order || ''],
     ['colNtr', (r) => r.ntr || ''], ['xNtrOms', (r) => (r.ntr ? r.ntrNaam : t('ntrMissing'))], ['xNtrConf', (r) => yesNo(r.ntrBevestigd)], ['lbl_fout', (r) => r.fout || ''], ['xFout', (r) => r.foutNaam],
     ['TREE 1', (r) => r.tree[0] || ''], ['TREE 2', (r) => r.tree[1] || ''], ['TREE 3', (r) => r.tree[2] || ''],
     ['lbl_status', (r) => r.faseNaam], ['lbl_actie', (r) => actieNaam(r.actie)], ['xInterv', (r) => yesNo(r.interv)], ['xDossier', (r) => r.dos], ['xDosSize', (r) => r.dosSize],
