@@ -269,7 +269,7 @@ function pdfFin(doc, P) {
     const tmp = document.createElement('canvas'); tmp.width = c.width; tmp.height = c.height;
     const g = tmp.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, tmp.width, tmp.height); g.drawImage(c, 0, 0);
     const ih = (CW * tmp.height) / tmp.width;
-    P.h2(t('finEvolTitle')); P.need(ih + 16); pull();
+    P.h2(t('finEvolTitle') + ' – ' + t({ klacht: 'finAxKlacht', prod: 'finAxProd', curve: 'finAxCurve' }[FIN.axis || 'klacht'])); P.need(ih + 16); pull();
     doc.addImage(tmp.toDataURL('image/png'), 'PNG', M, y, CW, ih, undefined, 'FAST'); y += ih + 1; sync();
     P.drawLegend(finChart.data.datasets.map((d) => ({ label: String(d.label), color: d.borderColor, dash: !!d.borderDash })));
     P.para(FIN.evolNote, 7.5, 110); pull(); y += 3; sync();

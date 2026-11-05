@@ -175,6 +175,7 @@ function findSheets(wb) {
         : hdr.includes('BVOLGN') ? 'oorzaak'
         : hdr.includes('LTYPE') && hdr.includes('LCODE') ? 'lookup'
         : hdr.includes('OORNR') && hdr.includes('OBRON') ? 'orders'
+        : hdr.includes('VPROD') && hdr.includes('PMAAND') ? 'vprodP'
         : hdr.includes('VPROD') && hdr.includes('VMAAND') ? 'vprod'
         : hdr.includes('VKLANT') && hdr.includes('VOMZET') ? 'vklant'
         : hdr.includes('POORNR') && hdr.includes('POPLAA') ? 'plaatsers' : null;
@@ -238,7 +239,7 @@ function buildData(sheets, fileName, fileDate) {
       const cur = ORD.get(o); if (cur && cur.pr <= pr) continue;
       const jj = num(r[oi.ODATJJ]), mm = num(r[oi.ODATMM]), dd = num(r[oi.ODATDD]);
       ORD.set(o, {
-        pr, fakt: num(r[oi.OFAKTW]), plk: num(r[oi.OVOOPL]), art: oi.OARTNR != null ? num(r[oi.OARTNR]) : 0,
+        pr, fakt: num(r[oi.OFAKTW]), plk: num(r[oi.OVOOPL]), art: oi.OARTNR != null ? num(r[oi.OARTNR]) : 0, hoof: num(r[oi.OHOOFO]),
         d: jj > 1900 && mm >= 1 && mm <= 12 && dd >= 1 ? dayNum(new Date(jj, mm - 1, dd)) : null,
         dP: ddmmyyyy(r[oi.ODATPR]), dL: ddmmyyyy(r[oi.ODATLE]), dU: ddmmyyyy(r[oi.ODATUI]), lp: num(r[oi.OLEVPL]),
       });
@@ -256,7 +257,17 @@ function buildData(sheets, fileName, fileDate) {
     // namen van producten en productgroepen (ook voor producten zonder klacht)
     const pn = {}, pgn = {};
     for (const x of prod) { if (!(x[2] in pn)) pn[x[2]] = lk('PRODUCT', x[2]) || ''; if (!(x[3] in pgn)) pgn[x[3]] = lk('PG', x[3]) || ''; }
-    sales = { prod, pn, pgn };
+    // Query 9: dezelfde verkoop per PRODUCTIEMAAND van het order (voor de cohort-grafiek)
+    let prodP = null;
+    if (sheets.vprodP) {
+      const { idx: pi, rows: prows } = sheets.vprodP; prodP = [];
+      for (const r of prows) {
+        const y = num(r[pi.PJAAR]), m = num(r[pi.PMAAND]); if (y < 2000 || m < 1 || m > 12) continue;
+        const x = [y, m, num(r[pi.VPROD]), String(r[pi.VPG] ?? '').trim(), Math.round(num(r[pi.VOMZET]) * 100) / 100, num(r[pi.VAANTAL]), num(r[pi.VORDERS])];
+        prodP.push(x); if (!(x[2] in pn)) pn[x[2]] = lk('PRODUCT', x[2]) || ''; if (!(x[3] in pgn)) pgn[x[3]] = lk('PG', x[3]) || '';
+      }
+    }
+    sales = { prod, prodP, pn, pgn };
   }
   let klantSales = null;
   if (sheets.vklant) {
@@ -320,7 +331,11 @@ function buildData(sheets, fileName, fileDate) {
       oorz: oorz.get(id) || [],
     });
     const od = ORD.get(out[out.length - 1].order);
-    if (od) Object.assign(out[out.length - 1], { oFakt: od.fakt, oPlk: od.plk, oD: od.d, oDP: od.dP, oDL: od.dL, oDU: od.dU, oLp: od.lp, oArt: od.art });
+    if (od) {
+      // productiedatum: van het order zelf, anders van het hoofdorder
+      const hd = od.hoof && od.hoof !== out[out.length - 1].order ? ORD.get(od.hoof) : null;
+      Object.assign(out[out.length - 1], { oFakt: od.fakt, oPlk: od.plk, oD: od.d, oDP: od.dP, oDL: od.dL, oDU: od.dU, oLp: od.lp, oArt: od.art, dPr: od.dP || (hd && hd.dP) || null });
+    }
   }
   if (!out.length) throw new Error('Geen klachten gevonden in het bestand.');
   if (sales) assignProduct(out, sales, lk);
@@ -333,7 +348,7 @@ let DATA = null;          // { rows, fileName, fileDate }
 const F = { from: null, to: null, pg: new Set(), prod: new Set(), tree: new Set(), ntr: new Set(), fout: new Set(), klant: new Set(), status: new Set(), vert: new Set(), regio: new Set(), open: '', info: 'excl', actie: new Set(), vervolg: '', text: '' };
 let HIDDEN_YEARS = new Set(); try { HIDDEN_YEARS = new Set(JSON.parse(localStorage.getItem('kl_hiddenYears') || '[]')); } catch { /* geen opslag */ }
 const saveHidden = () => { try { localStorage.setItem('kl_hiddenYears', JSON.stringify([...HIDDEN_YEARS])); } catch { /* geen opslag */ } };
-const UI = { report: 'klachten', finTeller: 'orders', finGran: 'Q', mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
+const UI = { report: 'klachten', finTeller: 'orders', finGran: 'Q', finAxis: 'klacht', finWin12: true, finCurve: 'ratio', mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
 let filtered = [];
 let CHIPS = []; // labels van de actieve filters (ook voor het PDF-rapport)
 let chart = null;
@@ -434,7 +449,7 @@ async function loadFromServer(retry = true) {
       if (p.ks) Object.assign(klantSales, p.ks);
       if (p.sp) sp = p;
     }
-    applyData({ rows, sales: { prod: sp ? sp.sp : null, pn: sp ? sp.pn || {} : {}, pgn: sp ? sp.pgn || {} : {}, klant: Object.keys(klantSales).length ? klantSales : null }, version: data.version, uploadedAt: data.uploadedAt, fileName: data.fileName });
+    applyData({ rows, sales: { prod: sp ? sp.sp : null, prodP: sp ? sp.spp || null : null, pn: sp ? sp.pn || {} : {}, pgn: sp ? sp.pgn || {} : {}, klant: Object.keys(klantSales).length ? klantSales : null }, version: data.version, uploadedAt: data.uploadedAt, fileName: data.fileName });
     setStatus('');
   } catch (e) {
     console.error(e);
@@ -574,7 +589,7 @@ async function prepareUpload(file) {
       if (built.klantSales) for (const r of list) if (built.klantSales[r.klant] && !ks[r.klant]) ks[r.klant] = built.klantSales[r.klant];
       payloads.set(vt, { rows: list, ks });
     }
-    if (built.sales) payloads.set(SALES_VT, { sp: built.sales.prod, pn: built.sales.pn, pgn: built.sales.pgn });
+    if (built.sales) payloads.set(SALES_VT, { sp: built.sales.prod, spp: built.sales.prodP, pn: built.sales.pn, pgn: built.sales.pgn });
     for (const [vt, payload] of payloads) {
       const list = payload.rows || [];
       const json = JSON.stringify(payload);

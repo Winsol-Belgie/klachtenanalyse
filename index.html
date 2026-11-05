@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Winsol Klachtenanalyse</title>
   <!-- Zelfde huisstijl als de Presentatievertaler en de Meeting Report Generator -->
-  <link rel="stylesheet" href="styles.css?v=202611051800" />
+  <link rel="stylesheet" href="styles.css?v=202611061000" />
   <style>
     .container { max-width: 1280px; }
     .step-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--brand); border-radius:50%; font-size:0.75rem; font-weight:700; color:#111; flex-shrink:0; }
@@ -97,6 +97,7 @@
     .seg button.on { background:var(--brand); }
     .chart-ctrl [hidden] { display:none; }
     .chart-ctrl > .slot-per { min-width:220px; }
+    .fin-chk { display:flex; align-items:center; gap:6px; font-size:0.85rem; height:36px; cursor:pointer; }
     .chart-box { position:relative; height:340px; }
     .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:0.78rem; color:#444; }
     .legend span { display:inline-flex; align-items:center; gap:6px; }
@@ -438,8 +439,20 @@
           <h2 class="section-title"><span class="step-badge">2</span><span data-info="finEvol"><span data-i18n="finEvolTitle">Klachtratio en kost door de tijd</span></span></h2>
           <div class="chart-ctrl">
             <div>
+              <label class="field-label" data-info="finAxis"><span data-i18n="finAxisLbl">Tijdas</span></label>
+              <div class="seg" id="segFinAxis"><button data-v="klacht" class="on" data-i18n="finAxKlacht">Klachtdatum</button><button data-v="prod" data-i18n="finAxProd">Productiedatum (cohort)</button><button data-v="curve" data-i18n="finAxCurve">Ouderdomscurve</button></div>
+            </div>
+            <div id="finGranBox">
               <label class="field-label" data-i18n="per">Per</label>
               <div class="seg" id="segFinGran"><button data-v="M" data-i18n="month">Maand</button><button data-v="Q" class="on" data-i18n="quarter">Kwartaal</button><button data-v="Y" data-i18n="year">Jaar</button></div>
+            </div>
+            <div id="finWinBox" hidden>
+              <label class="field-label">&nbsp;</label>
+              <label class="fin-chk"><input type="checkbox" id="finWin12"> <span data-i18n="finWin12">Enkel klachten binnen 12 maanden na productie</span></label>
+            </div>
+            <div id="finCurveBox" hidden>
+              <label class="field-label" data-i18n="finCurveShow">Toon</label>
+              <div class="seg" id="segFinCurve"><button data-v="ratio" class="on" data-i18n="finCurveRatio">% met klacht</button><button data-v="cost" data-i18n="finKCostPct">Klachtkost in % van de omzet</button></div>
             </div>
           </div>
           <div class="chart-box"><canvas id="finChart"></canvas></div>
@@ -493,11 +506,11 @@
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/chart.umd.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
-<script src="i18n.js?v=202611051800"></script>
-<script src="app.js?v=202611051800"></script>
-<script src="info.js?v=202611051800"></script>
-<script src="info-i18n.js?v=202611051800"></script>
-<script src="fin.js?v=202611051800"></script>
-<script src="report.js?v=202611051800"></script>
+<script src="i18n.js?v=202611061000"></script>
+<script src="app.js?v=202611061000"></script>
+<script src="info.js?v=202611061000"></script>
+<script src="info-i18n.js?v=202611061000"></script>
+<script src="fin.js?v=202611061000"></script>
+<script src="report.js?v=202611061000"></script>
 </body>
 </html>

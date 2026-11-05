@@ -155,57 +155,8 @@ function renderFin() {
   ];
   $('finKpi').innerHTML = kpis.map((k) => `<div class="stat"><b>${esc(k.v)}</b><span>${esc(k.l)}</span><span class="calc">${esc(k.c)}</span></div>`).join('');
 
-  // ── Evolutie ──
-  const gran = mode === 'prod' ? UI.finGran : 'Y';
-  document.querySelectorAll('#segFinGran button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.v === gran); b.disabled = mode !== 'prod' && b.dataset.v !== 'Y';
-    b.title = b.disabled ? t('finGranKlant') : '';
-  });
-  // Bij een klant (omzet enkel per jaar) toont de grafiek alle jaren, niet enkel de gekozen periode.
-  let RC = R, chartRows = rows;
-  if (mode !== 'prod') {
-    const all = DATA.rows.filter((r) => matches(r, 'period'));
-    let y0 = Infinity, y1 = -Infinity; for (const r of DATA.rows) { const y = new Date(r.d * 864e5).getUTCFullYear(); if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    RC = { m0: y0 * 12, m1: y1 * 12 + 11, y0, y1 }; chartRows = all;
-  }
-  const keyOf = (mi) => { const y = Math.floor(mi / 12), m = mi % 12; return gran === 'Y' ? String(y) : gran === 'Q' ? `${y}-${t('qShort')}${Math.floor(m / 3) + 1}` : `${y}-${String(m + 1).padStart(2, '0')}`; };
-  const keys = []; for (let mi = RC.m0; mi <= RC.m1; mi++) { const k = keyOf(mi); if (keys[keys.length - 1] !== k) keys.push(k); }
-  const byKey = new Map(keys.map((k) => [k, []]));
-  for (const r of chartRows) { const l = byKey.get(keyOf(monthIdx(r.d))); if (l) l.push(r); }
-  const denP = finDenom(mode, RC, keyOf).per;
-  const prettyK = (k) => (gran === 'M' ? midxLabel(Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) : k);
-  const serRatio = [], serCost = [], cnt = [];
-  for (const k of keys) {
-    const l = byKey.get(k), d = denP.get(k) || [0, 0];
-    const te = tellerOf(l), c = l.reduce((s, r) => s + r.cost, 0);
-    serRatio.push(d[1] ? Math.round(ratioOf(te, d[1]) * 10) / 10 : null);
-    serCost.push(d[0] ? Math.round((c / d[0]) * 1000) / 10 : null);
-    cnt.push({ te, o: d[1], c, om: d[0] });
-  }
-  if (finChart) finChart.destroy();
-  const rl = ratioLabel(), cl = t('finKCostPct');
-  finChart = new Chart($('finChart'), {
-    type: 'line',
-    data: { labels: keys.map(prettyK), datasets: [
-      { label: rl, data: serRatio, yAxisID: 'y', borderColor: COLORS[0], backgroundColor: COLORS[0], borderWidth: 2.5, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
-      { label: cl, data: serCost, yAxisID: 'y1', borderColor: COLORS[1], backgroundColor: COLORS[1], borderWidth: 2, borderDash: [6, 4], pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
-    ] },
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111', padding: 10, boxPadding: 4, callbacks: {
-        label: (c) => { const x = cnt[c.dataIndex]; return c.datasetIndex === 0 ? ` ${rl}: ${fpct(c.raw)} (${nf.format(x.te)} / ${nf.format(x.o)})` : ` ${cl}: ${fpct(c.raw)} (${eur.format(x.c)} / ${eur.format(x.om)})`; },
-      } } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
-        y: { beginAtZero: true, position: 'left', grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: rl, color: COLORS[0] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
-        y1: { beginAtZero: true, position: 'right', grid: { display: false }, border: { display: false }, title: { display: true, text: cl, color: COLORS[1] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
-      },
-    },
-  });
-  const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0);
-  const lastPartial = keys.length && keyOf(monthIdx(maxD + 1)) === keys[keys.length - 1];
-  const evolNote = [t(mode === 'prod' ? 'finEvolNoteProd' : 'finEvolNoteKlant')]; if (lastPartial) evolNote.push(t('finEvolPartial'));
-  $('finLegend').innerHTML = `<span><i style="background:${COLORS[0]}"></i>${esc(rl)}</span><span><i style="background:${COLORS[1]}"></i>${esc(cl)}</span><div style="flex-basis:100%;color:#6b7280">${esc(evolNote.join(' '))}</div>`;
+  // ── Evolutie ── (tijdas: klachtdatum, productiedatum of ouderdomscurve)
+  const evolNote = renderFinChart(mode, R, rows);
 
   // ── Tabel per productgroep (of per jaar bij een klant) ──
   const S = DATA.sales;
@@ -274,7 +225,220 @@ function renderFin() {
     $('finProdSub').textContent = t('finProdSub', { min: eur.format(FIN_MIN_PROD) });
   }
 
-  FIN = { kpis, note: $('finNote').textContent, head, firstCol, pgTitle, pgRows, klRows: top(klRows), prRows: top(prRows), klSub: $('finKlantSub').textContent, prSub: mode === 'prod' ? $('finProdSub').textContent : '', evolNote: evolNote.join(' '), mode };
+  FIN = { kpis, note: $('finNote').textContent, head, firstCol, pgTitle, pgRows, klRows: top(klRows), prRows: top(prRows), klSub: $('finKlantSub').textContent, prSub: mode === 'prod' ? $('finProdSub').textContent : '', evolNote: evolNote.join(' '), mode, axis: UI.finAxis };
+}
+
+
+/* ───────── Grafiek "Klachtratio en kost door de tijd" ─────────
+ * Drie tijdassen (UI.finAxis):
+ *  klacht : teller per maand van de KLACHTDATUM, noemer = verkoop (voorfacturatie) in die maand (query 6).
+ *  prod   : cohort per PRODUCTIEMAAND van het (hoofd)order: teller = klachten op orders geproduceerd in die maand,
+ *           ook als de klacht later kwam; noemer = orders en omzet geproduceerd in die maand (query 9).
+ *           Optie: enkel klachten binnen 12 maanden na productie (eerlijk vergelijkbaar). Maanden jonger dan 12 maanden = gestippeld.
+ *  curve  : ouderdomscurve: per productiejaar het cumulatieve aandeel na 0..36 maanden. Elk jaar telt enkel de productiemaanden
+ *           die al zo oud zijn. */
+const FIN_RIPE = 12;      // maanden na productie waarna een cohort als "volledig" geldt
+const FIN_CURVE_MAX = 36; // x-as van de ouderdomscurve
+const MONTH_DAYS = 30.44;
+function finAxisOk(mode) { return mode === 'prod' && !!(DATA.sales && DATA.sales.prodP && DATA.sales.prodP.length) && DATA.rows.some((r) => r.dPr); }
+function finLegend2(rl, cl, notes) {
+  $('finLegend').innerHTML = `<span><i style="background:${COLORS[0]}"></i>${esc(rl)}</span><span><i style="background:${COLORS[1]}"></i>${esc(cl)}</span><div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
+}
+function renderFinChart(mode, R, rows) {
+  const ok = finAxisOk(mode);
+  if (!ok && UI.finAxis !== 'klacht') UI.finAxis = 'klacht';
+  document.querySelectorAll('#segFinAxis button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.v === UI.finAxis);
+    b.disabled = b.dataset.v !== 'klacht' && !ok;
+    b.title = b.disabled ? t(mode !== 'prod' ? 'finAxNoKlant' : 'finAxNoData') : '';
+  });
+  $('finGranBox').hidden = UI.finAxis === 'curve';
+  $('finWinBox').hidden = UI.finAxis !== 'prod';
+  $('finCurveBox').hidden = UI.finAxis !== 'curve';
+  $('finWin12').checked = !!UI.finWin12;
+  document.querySelectorAll('#segFinCurve button').forEach((b) => b.classList.toggle('on', b.dataset.v === UI.finCurve));
+  if (UI.finAxis === 'prod') return finChartCohort(R);
+  if (UI.finAxis === 'curve') return finChartCurve();
+  return finChartKlacht(mode, R, rows);
+}
+
+function finChartKlacht(mode, R, rows) {
+  const gran = mode === 'prod' ? UI.finGran : 'Y';
+  document.querySelectorAll('#segFinGran button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.v === gran); b.disabled = mode !== 'prod' && b.dataset.v !== 'Y';
+    b.title = b.disabled ? t('finGranKlant') : '';
+  });
+  // Bij een klant (omzet enkel per jaar) toont de grafiek alle jaren, niet enkel de gekozen periode.
+  let RC = R, chartRows = rows;
+  if (mode !== 'prod') {
+    const all = DATA.rows.filter((r) => matches(r, 'period'));
+    let y0 = Infinity, y1 = -Infinity; for (const r of DATA.rows) { const y = new Date(r.d * 864e5).getUTCFullYear(); if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    RC = { m0: y0 * 12, m1: y1 * 12 + 11, y0, y1 }; chartRows = all;
+  }
+  const keyOf = (mi) => { const y = Math.floor(mi / 12), m = mi % 12; return gran === 'Y' ? String(y) : gran === 'Q' ? `${y}-${t('qShort')}${Math.floor(m / 3) + 1}` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+  const keys = []; for (let mi = RC.m0; mi <= RC.m1; mi++) { const k = keyOf(mi); if (keys[keys.length - 1] !== k) keys.push(k); }
+  const byKey = new Map(keys.map((k) => [k, []]));
+  for (const r of chartRows) { const l = byKey.get(keyOf(monthIdx(r.d))); if (l) l.push(r); }
+  const denP = finDenom(mode, RC, keyOf).per;
+  const prettyK = (k) => (gran === 'M' ? midxLabel(Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) : k);
+  const serRatio = [], serCost = [], cnt = [];
+  for (const k of keys) {
+    const l = byKey.get(k), d = denP.get(k) || [0, 0];
+    const te = tellerOf(l), c = l.reduce((s, r) => s + r.cost, 0);
+    serRatio.push(d[1] ? Math.round(ratioOf(te, d[1]) * 10) / 10 : null);
+    serCost.push(d[0] ? Math.round((c / d[0]) * 1000) / 10 : null);
+    cnt.push({ te, o: d[1], c, om: d[0] });
+  }
+  if (finChart) finChart.destroy();
+  const rl = ratioLabel(), cl = t('finKCostPct');
+  finChart = new Chart($('finChart'), {
+    type: 'line',
+    data: { labels: keys.map(prettyK), datasets: [
+      { label: rl, data: serRatio, yAxisID: 'y', borderColor: COLORS[0], backgroundColor: COLORS[0], borderWidth: 2.5, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
+      { label: cl, data: serCost, yAxisID: 'y1', borderColor: COLORS[1], backgroundColor: COLORS[1], borderWidth: 2, borderDash: [6, 4], pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25 },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111', padding: 10, boxPadding: 4, callbacks: {
+        label: (c) => { const x = cnt[c.dataIndex]; return c.datasetIndex === 0 ? ` ${rl}: ${fpct(c.raw)} (${nf.format(x.te)} / ${nf.format(x.o)})` : ` ${cl}: ${fpct(c.raw)} (${eur.format(x.c)} / ${eur.format(x.om)})`; },
+      } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+        y: { beginAtZero: true, position: 'left', grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: rl, color: COLORS[0] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+        y1: { beginAtZero: true, position: 'right', grid: { display: false }, border: { display: false }, title: { display: true, text: cl, color: COLORS[1] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+      },
+    },
+  });
+  const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0);
+  const lastPartial = keys.length && keyOf(monthIdx(maxD + 1)) === keys[keys.length - 1];
+  const evolNote = [t(mode === 'prod' ? 'finEvolNoteProd' : 'finEvolNoteKlant')]; if (lastPartial) evolNote.push(t('finEvolPartial'));
+  finLegend2(rl, cl, evolNote);
+  return evolNote;
+
+}
+
+// teller-eenheid van een klacht (order, dossier of klacht zelf)
+const finUnit = (r) => (UI.finTeller === 'all' ? 'k' + r.id : UI.finTeller === 'dos' ? 'd' + r.dos : isOrder(r.order) ? 'o' + r.order : null);
+function finProdRows() { return DATA.rows.filter((r) => r.dPr && matches(r, 'period')); }
+
+function finChartCohort(R) {
+  const S = DATA.sales, gran = UI.finGran;
+  const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0), endMi = monthIdx(maxD);
+  const keyOf = (mi) => { const y = Math.floor(mi / 12), m = mi % 12; return gran === 'Y' ? String(y) : gran === 'Q' ? `${y}-${t('qShort')}${Math.floor(m / 3) + 1}` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+  const keys = [], lastMi = new Map();
+  for (let mi = R.m0; mi <= R.m1; mi++) { const k = keyOf(mi); if (keys[keys.length - 1] !== k) keys.push(k); lastMi.set(k, mi); }
+  const byKey = new Map(keys.map((k) => [k, []]));
+  const all = finProdRows();
+  const noDate = DATA.rows.filter((r) => !r.dPr && matches(r, 'period')).length;
+  for (const r of all) {
+    if (UI.finWin12 && r.d - r.dPr > FIN_RIPE * MONTH_DAYS) continue;
+    const l = byKey.get(keyOf(monthIdx(r.dPr))); if (l) l.push(r);
+  }
+  const den = new Map();
+  for (const x of S.prodP) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const k = keyOf(mi); const e = den.get(k) || [0, 0]; e[0] += x[4]; e[1] += x[6]; den.set(k, e); }
+  const prettyK = (k) => (gran === 'M' ? midxLabel(Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) : k);
+  const serRatio = [], serCost = [], cnt = [], unripe = [];
+  for (const k of keys) {
+    const l = byKey.get(k), d = den.get(k) || [0, 0];
+    const te = tellerOf(l), c = l.reduce((s, r) => s + r.cost, 0);
+    serRatio.push(d[1] ? Math.round(ratioOf(te, d[1]) * 10) / 10 : null);
+    serCost.push(d[0] ? Math.round((c / d[0]) * 1000) / 10 : null);
+    cnt.push({ te, o: d[1], c, om: d[0] }); unripe.push(endMi - lastMi.get(k) < FIN_RIPE);
+  }
+  const rl = ratioLabel(), cl = t('finKCostPct');
+  const dash = (i) => (unripe[i] ? [3, 4] : undefined);
+  if (finChart) finChart.destroy();
+  finChart = new Chart($('finChart'), {
+    type: 'line',
+    data: { labels: keys.map(prettyK), datasets: [
+      { label: rl, data: serRatio, yAxisID: 'y', borderColor: COLORS[0], backgroundColor: COLORS[0], borderWidth: 2.5, pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25,
+        segment: { borderDash: (c) => dash(c.p1DataIndex) }, pointBackgroundColor: unripe.map((u) => (u ? '#fff' : COLORS[0])) },
+      { label: cl, data: serCost, yAxisID: 'y1', borderColor: COLORS[1], backgroundColor: COLORS[1], borderWidth: 2, borderDash: [6, 4], pointRadius: keys.length > 40 ? 0 : 3, tension: 0.25,
+        segment: { borderDash: (c) => (unripe[c.p1DataIndex] ? [2, 5] : [6, 4]) }, pointBackgroundColor: unripe.map((u) => (u ? '#fff' : COLORS[1])) },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111', padding: 10, boxPadding: 4, callbacks: {
+        title: (c) => t('finTipProd', { p: c[0].label }) + (unripe[c[0].dataIndex] ? ' · ' + t('finUnripe') : ''),
+        label: (c) => { const x = cnt[c.dataIndex]; return c.datasetIndex === 0 ? ` ${rl}: ${fpct(c.raw)} (${nf.format(x.te)} / ${nf.format(x.o)})` : ` ${cl}: ${fpct(c.raw)} (${eur.format(x.c)} / ${eur.format(x.om)})`; },
+      } } },
+      scales: {
+        x: { grid: { display: false }, title: { display: true, text: t('finAxProdX'), color: '#6b7280' }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 } },
+        y: { beginAtZero: true, position: 'left', grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: rl, color: COLORS[0] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+        y1: { beginAtZero: true, position: 'right', grid: { display: false }, border: { display: false }, title: { display: true, text: cl, color: COLORS[1] }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+      },
+    },
+  });
+  const notes = [t('finNoteCohort'), t(UI.finWin12 ? 'finNoteWin12' : 'finNoteNoWin'), t('finNoteUnripe', { n: FIN_RIPE })];
+  if (noDate) notes.push(t('finNoteNoDate', { n: nf.format(noDate) }));
+  notes.push(t('finNoteKpiKlacht'));
+  finLegend2(rl, cl, notes);
+  return notes;
+}
+
+function finChartCurve() {
+  const S = DATA.sales, cost = UI.finCurve === 'cost';
+  const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0), endMi = monthIdx(maxD);
+  // noemer per productiemaand
+  const N = new Map(), OM = new Map();
+  for (const x of S.prodP) { if (!prodMatch(x)) continue; const mi = x[0] * 12 + (x[1] - 1); N.set(mi, (N.get(mi) || 0) + x[6]); OM.set(mi, (OM.get(mi) || 0) + x[4]); }
+  // teller: per eenheid de leeftijd (maanden na productie) van de eerste klacht; kost per leeftijd
+  const first = new Map(); const costAt = new Map(); // mi -> array per leeftijd
+  for (const r of finProdRows()) {
+    const mi = monthIdx(r.dPr), age = Math.max(0, Math.floor((r.d - r.dPr) / MONTH_DAYS));
+    let a = costAt.get(mi); if (!a) costAt.set(mi, (a = new Array(FIN_CURVE_MAX + 1).fill(0)));
+    if (age <= FIN_CURVE_MAX) a[age] += r.cost;
+    const u = finUnit(r); if (!u) continue;
+    const k = mi + '|' + u, cur = first.get(k); if (cur == null || age < cur) first.set(k, age);
+  }
+  const unitsAt = new Map();
+  for (const [k, age] of first) { if (age > FIN_CURVE_MAX) continue; const mi = Number(k.split('|')[0]); let a = unitsAt.get(mi); if (!a) unitsAt.set(mi, (a = new Array(FIN_CURVE_MAX + 1).fill(0))); a[age]++; }
+  const years = [...new Set([...N.keys()].map((mi) => Math.floor(mi / 12)))].filter((y) => y >= 2020).sort();
+  const curY = Math.floor(endMi / 12);
+  const colorOf = (y) => (y === curY ? '#111111' : COLORS[((y - 2020) % COLORS.length + COLORS.length) % COLORS.length]);
+  const labels = Array.from({ length: FIN_CURVE_MAX + 1 }, (_, i) => String(i));
+  const ds = [], tipData = new Map();
+  for (const y of years) {
+    const data = [], tip = [];
+    // Per leeftijd k: de NIEUWE klachten (eerste klacht op die leeftijd) in de productiemaanden die al k maanden oud zijn,
+    // gedeeld door de orders (omzet) van diezelfde maanden; daarna optellen. Zo stijgt de curve altijd en gebruikt ze alle info.
+    // Stop wanneer minder dan 25% van de productie van dat jaar al zo oud is (te weinig om iets te zeggen).
+    let totN = 0; for (let m = 0; m < 12; m++) totN += (cost ? OM.get(y * 12 + m) : N.get(y * 12 + m)) || 0;
+    let cum = 0, cumNum = 0;
+    for (let k = 0; k <= FIN_CURVE_MAX; k++) {
+      let num = 0, den = 0;
+      for (let m = 0; m < 12; m++) {
+        const mi = y * 12 + m; if (mi + k >= endMi || !N.get(mi)) continue;
+        if (cost) { const c = costAt.get(mi); num += c ? c[k] : 0; den += OM.get(mi) || 0; } else { const u = unitsAt.get(mi); num += u ? u[k] : 0; den += N.get(mi); }
+      }
+      if (!den || den < totN * 0.25) { data.push(null); tip.push(null); continue; }
+      cum += num / den; cumNum += num;
+      data.push(Math.round(cum * 1000) / 10); tip.push({ num: cumNum, den });
+    }
+    if (data.every((v) => v == null)) continue;
+    ds.push({ key: String(y), label: String(y), data, borderColor: colorOf(y), backgroundColor: colorOf(y), borderWidth: y === curY ? 3 : 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false });
+    tipData.set(String(y), tip);
+  }
+  const yl = cost ? t('finCurveYCost') : t('finCurveY', { r: ratioLabel() });
+  if (finChart) finChart.destroy();
+  finChart = new Chart($('finChart'), {
+    type: 'line',
+    data: { labels, datasets: ds },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111', padding: 10, boxPadding: 4, filter: (c) => c.raw != null, callbacks: {
+        title: (c) => t('finCurveTip', { m: c[0].label }),
+        label: (c) => { const x = tipData.get(c.dataset.key)[c.dataIndex]; return ` ${c.dataset.label}: ${fpct(c.raw)}` + (x ? ' (' + t(cost ? 'finCurveBaseC' : 'finCurveBaseN', { n: cost ? eur.format(x.den) : nf.format(x.den), m: c.label }) + ')' : ''); },
+      } } },
+      scales: {
+        x: { grid: { display: false }, title: { display: true, text: t('finCurveX'), color: '#6b7280' }, ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 13 } },
+        y: { beginAtZero: true, grid: { color: '#eef0f2' }, border: { display: false }, title: { display: true, text: yl, color: '#6b7280' }, ticks: { color: '#6b7280', callback: (v) => v + '%' } },
+      },
+    },
+  });
+  const notes = [t('finNoteCurve'), t('finNoteKpiKlacht')];
+  $('finLegend').innerHTML = ds.map((d) => `<span><i style="background:${d.borderColor}"></i>${esc(d.label)}</span>`).join('') + `<div style="flex-basis:100%;color:#6b7280">${esc(notes.join(' '))}</div>`;
+  return notes;
 }
 
 /* ── bediening ── */
@@ -283,6 +447,15 @@ $('segFinTeller').addEventListener('click', (e) => {
   $('segFinTeller').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
   if (DATA) renderFin();
 });
+$('segFinAxis').addEventListener('click', (e) => {
+  const v = e.target.dataset.v; if (!v || e.target.disabled) return; UI.finAxis = v;
+  if (DATA) renderFin();
+});
+$('segFinCurve').addEventListener('click', (e) => {
+  const v = e.target.dataset.v; if (!v) return; UI.finCurve = v;
+  if (DATA) renderFin();
+});
+$('finWin12').addEventListener('change', (e) => { UI.finWin12 = e.target.checked; if (DATA) renderFin(); });
 $('segFinGran').addEventListener('click', (e) => {
   const v = e.target.dataset.v; if (!v || e.target.disabled) return; UI.finGran = v;
   if (DATA) renderFin();
