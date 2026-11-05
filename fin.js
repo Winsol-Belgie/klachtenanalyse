@@ -71,9 +71,23 @@ function prodMatch(x) { // x = [y, m, prod, pg, omzet, aantal, orders]
   if (F.pg.size) return F.pg.has(x[3]);
   return true;
 }
+// Maanddata beschikbaar? Altijd voor de totale verkoop; voor klanten enkel met de nieuwe query 7 (klant × product × maand).
+const finMonthly = (mode) => mode === 'prod' || !!(DATA.sales && DATA.sales.klantP);
+// Bron van de noemer, in de vorm [jaar, maand, product, pg, omzet, aantal, orders]
+let FSRC = null, FSRC_KEY = "", FSRC_DATA = null;
+function finSrc(mode) {
+  const S = DATA.sales; if (mode === 'prod') return S.prod;
+  const key = mode + '|' + [...F.klant].join(',') + '|' + DATA.rows.length;
+  if (FSRC_KEY === key && FSRC && FSRC_DATA === DATA) return FSRC;
+  const out = []; for (const k of klantKeys(mode)) { const l = S.klantP[k]; if (l) for (const x of l) out.push(x); }
+  FSRC = out; FSRC_KEY = key; FSRC_DATA = DATA; return out;
+}
+// Namen van productgroepen en producten, ook zonder het verkoopblok (verkopers, directeurs)
+function pgName(pg) { const S = DATA.sales; if (S.pgn && S.pgn[pg]) return S.pgn[pg]; const r = DATA.rows.find((x) => x.pg === pg); return r ? r.pgNaam : pg; }
+function prodName(p) { const S = DATA.sales; if (S.pn && S.pn[p]) return S.pn[p]; const r = DATA.rows.find((x) => x.prod === p); return r ? r.prodNaam : 'Product ' + p; }
 // De klachten voor dit rapport: alle filters, maar de productgroep volgens de verkoopindeling.
 function finRows(mode) {
-  if (mode !== 'prod') {
+  if (!finMonthly(mode)) {
     // omzet per klant bestaat enkel per jaar: dan ook de klachten van die volledige jaren nemen
     const R = finRange(); const a = Date.UTC(R.y0, 0, 1) / 864e5, b = Date.UTC(R.y1, 11, 31) / 864e5;
     return DATA.rows.filter((r) => r.d >= a && r.d <= b && matches(r, 'period'));
@@ -92,8 +106,8 @@ function finDenom(mode, R, keyOfMonth) {
   const S = DATA.sales;
   const per = new Map(); let omzet = 0, orders = 0;
   const add = (k, o, n) => { omzet += o; orders += n; if (k == null) return; const e = per.get(k) || [0, 0]; e[0] += o; e[1] += n; per.set(k, e); };
-  if (mode === 'prod') {
-    for (const x of S.prod) {
+  if (finMonthly(mode)) {
+    for (const x of finSrc(mode)) {
       const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue;
       add(keyOfMonth ? keyOfMonth(mi) : null, x[4], x[6]);
     }
@@ -107,11 +121,13 @@ function finDenom(mode, R, keyOfMonth) {
 }
 
 function finDenomLabel(mode, R) {
-  const per = mode === 'prod' ? `${midxLabel(R.m0)} – ${midxLabel(R.m1)}` : (R.y0 === R.y1 ? String(R.y0) : `${R.y0}–${R.y1}`);
-  if (mode === 'klant') return t('finDenKlant', { n: F.klant.size, per });
-  if (mode === 'klantAll') return t('finDenKlantAll', { per });
+  const per = finMonthly(mode) ? `${midxLabel(R.m0)} – ${midxLabel(R.m1)}` : (R.y0 === R.y1 ? String(R.y0) : `${R.y0}–${R.y1}`);
+  const what = F.prod.size ? t('finDenWhatProd', { n: F.prod.size }) : F.pg.size ? [...F.pg].map(pgName).join(', ') : '';
+  const kper = finMonthly(mode) ? (what ? what + ', ' + per : per) : per;
+  if (mode === 'klant') return t(finMonthly(mode) ? 'finDenKlantM' : 'finDenKlant', { n: F.klant.size, per: kper });
+  if (mode === 'klantAll') return t(finMonthly(mode) ? 'finDenKlantAllM' : 'finDenKlantAll', { per: kper });
   if (F.prod.size) return t('finDenProd', { n: F.prod.size, per });
-  if (F.pg.size) return t('finDenPg', { list: [...F.pg].map((c) => DATA.sales.pgn[c] || c).join(', '), per });
+  if (F.pg.size) return t('finDenPg', { list: [...F.pg].map(pgName).join(', '), per });
   return t('finDenAll', { per });
 }
 
@@ -126,7 +142,7 @@ function renderFin() {
   const nm = { tree: 'TREE', ntr: 'NTR', fout: t('lbl_fout'), status: t('lbl_status'), vert: t('lbl_vert'), regio: t('lbl_regio'), actie: t('lbl_actie') };
   for (const k of Object.keys(nm)) if (F[k].size) only.push(nm[k]);
   if (F.open) only.push(t('lbl_open')); if (F.vervolg) only.push(t('lbl_vervolg')); if (F.info !== 'excl') only.push(t('lbl_terinfo')); if (F.text) only.push(t('chipSearch', { q: F.text }));
-  if (F.klant.size && (F.pg.size || F.prod.size)) only.push(F.prod.size ? t('lbl_prod') : t('lbl_pg'));
+  if (F.klant.size && (F.pg.size || F.prod.size) && !finMonthly(mode)) only.push(F.prod.size ? t('lbl_prod') : t('lbl_pg'));
   $('finNote').innerHTML = esc(t('finNoteBase') + ' ' + t('finNotePg')) + (only.length ? ' <b>' + esc(t('finNoteOnly', { list: only.join(', ') })) + '</b>' : '');
 
   if (!mode) {
@@ -162,15 +178,15 @@ function renderFin() {
   const S = DATA.sales;
   const head = [t('finColOmzet'), t('finKSold'), tellerLabel(), ratioLabel(), t('finKCost'), t('finKCostPct')];
   let pgRows = [], pgTitle;
-  if (mode === 'prod') {
+  if (finMonthly(mode)) {
     pgTitle = t('finPgTitle');
     const sal = new Map();
-    for (const x of S.prod) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const e = sal.get(x[3]) || [0, 0]; e[0] += x[4]; e[1] += x[6]; sal.set(x[3], e); }
+    for (const x of finSrc(mode)) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const e = sal.get(x[3]) || [0, 0]; e[0] += x[4]; e[1] += x[6]; sal.set(x[3], e); }
     const kl = new Map(); for (const r of rows) { const pg = (r.aVia ? r.pg : salesPg(r.prod)) || '–'; let l = kl.get(pg); if (!l) kl.set(pg, (l = [])); l.push(r); }
     for (const pg of new Set([...sal.keys(), ...kl.keys()])) {
       const e = sal.get(pg) || [0, 0], l = kl.get(pg) || []; const c = l.reduce((s, r) => s + r.cost, 0), te = tellerOf(l);
       if (!e[0] && !l.length) continue;
-      pgRows.push({ key: pg === '–' ? null : pg, name: pg === '–' ? t('finNoSalesPg') : (S.pgn[pg] || pg), om: e[0], o: e[1], te, ra: ratioOf(te, e[1]), c, kp: e[0] > 0 ? (c / e[0]) * 100 : null });
+      pgRows.push({ key: pg === '–' ? null : pg, name: pg === '–' ? t('finNoSalesPg') : pgName(pg), om: e[0], o: e[1], te, ra: ratioOf(te, e[1]), c, kp: e[0] > 0 ? (c / e[0]) * 100 : null });
     }
     pgRows.sort((a, b) => b.om - a.om);
   } else {
@@ -183,7 +199,7 @@ function renderFin() {
   }
   $('finPgCard').querySelector('[data-i18n="finPgTitle"],[data-i18n="finYearTitle"]').textContent = pgTitle;
   const rowHtml = (x, extra) => `<tr${x.key != null ? ` data-k="${esc(x.key)}"` : ''}><td>${esc(x.name)}</td><td class="num">${eur.format(x.om)}</td><td class="num">${nf.format(x.o)}</td><td class="num">${nf.format(x.te)}</td><td class="num">${fpct(x.ra)}</td><td class="num">${eur.format(x.c)}</td><td class="num"><b>${fpct(x.kp)}</b></td>${extra || ''}</tr>`;
-  const firstCol = mode === 'prod' ? t('lbl_pg') : t('year');
+  const firstCol = finMonthly(mode) ? t('lbl_pg') : t('year');
   $('finPg').innerHTML = `<thead><tr><th>${esc(firstCol)}</th>${head.map((h) => `<th class="num">${esc(h)}</th>`).join('')}</tr></thead><tbody>${pgRows.map((x) => rowHtml(x)).join('') || `<tr><td colspan="7" class="empty">${esc(t('noData'))}</td></tr>`}</tbody>`;
   $('finPg').querySelectorAll('tr[data-k]').forEach((tr) => tr.addEventListener('click', () => addFilter('pg', tr.dataset.k)));
 
@@ -192,8 +208,11 @@ function renderFin() {
   if (S.klant) {
     const kl = new Map(); for (const r of rows) { let l = kl.get(r.klant); if (!l) kl.set(r.klant, (l = [])); l.push(r); }
     for (const [k, l] of kl) {
-      const ys = S.klant[k]; if (!ys) continue; let om = 0, o = 0;
-      for (let y = R.y0; y <= R.y1; y++) if (ys[y]) { om += ys[y][0]; o += ys[y][1]; }
+      let om = 0, o = 0;
+      if (S.klantP) { // per maand en product: zelfde periode en productgroep/product als de filters
+        const xs = S.klantP[k]; if (!xs) continue;
+        for (const x of xs) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; om += x[4]; o += x[6]; }
+      } else { const ys = S.klant[k]; if (!ys) continue; for (let y = R.y0; y <= R.y1; y++) if (ys[y]) { om += ys[y][0]; o += ys[y][1]; } }
       if (om < FIN_MIN_KLANT) continue;
       const c = l.reduce((s, r) => s + r.cost, 0), te = tellerOf(l);
       klRows.push({ key: k, name: `${l[0].klantNaam || t('nameUnknown')} (${l[0].klnr})`, om, o, te, ra: ratioOf(te, o), c, kp: (c / om) * 100 });
@@ -205,19 +224,19 @@ function renderFin() {
   $('finKlant').innerHTML = tblHead(t('lbl_klant')) + `<tbody>${top(klRows).map((x) => rowHtml(x)).join('') || `<tr><td colspan="7" class="empty">${esc(t('noData'))}</td></tr>`}</tbody>`;
   $('finKlant').querySelectorAll('tr[data-k]').forEach((tr) => tr.addEventListener('click', () => addFilter('klant', tr.dataset.k)));
   const yrs = R.y0 === R.y1 ? String(R.y0) : `${R.y0}–${R.y1}`;
-  $('finKlantSub').textContent = t('finKlantSub', { min: eur.format(FIN_MIN_KLANT), yrs }) + (F.pg.size || F.prod.size ? ' ' + t('finKlantSubAll') : '');
+  $('finKlantSub').textContent = S.klantP ? t('finKlantSubM', { min: eur.format(FIN_MIN_KLANT), per: `${midxLabel(R.m0)} – ${midxLabel(R.m1)}` }) : t('finKlantSub', { min: eur.format(FIN_MIN_KLANT), yrs }) + (F.pg.size || F.prod.size ? ' ' + t('finKlantSubAll') : '');
 
   // ── Top producten (enkel met verkoop per product) ──
   const prRows = [];
-  $('finProdCard').hidden = mode !== 'prod';
-  if (mode === 'prod') {
+  $('finProdCard').hidden = !finMonthly(mode);
+  if (finMonthly(mode)) {
     const sal = new Map();
-    for (const x of S.prod) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const e = sal.get(x[2]) || [0, 0]; e[0] += x[4]; e[1] += x[6]; sal.set(x[2], e); }
+    for (const x of finSrc(mode)) { const mi = x[0] * 12 + (x[1] - 1); if (mi < R.m0 || mi > R.m1 || !prodMatch(x)) continue; const e = sal.get(x[2]) || [0, 0]; e[0] += x[4]; e[1] += x[6]; sal.set(x[2], e); }
     const kl = new Map(); for (const r of rows) { let l = kl.get(r.prod); if (!l) kl.set(r.prod, (l = [])); l.push(r); }
     for (const [p, e] of sal) {
       if (e[0] < FIN_MIN_PROD) continue;
       const l = kl.get(p) || []; const c = l.reduce((s, r) => s + r.cost, 0), te = tellerOf(l);
-      prRows.push({ key: String(p), name: `${S.pn[p] || (l[0] && l[0].prodNaam) || 'Product ' + p} (${p})`, om: e[0], o: e[1], te, ra: ratioOf(te, e[1]), c, kp: (c / e[0]) * 100 });
+      prRows.push({ key: String(p), name: `${prodName(p)} (${p})`, om: e[0], o: e[1], te, ra: ratioOf(te, e[1]), c, kp: (c / e[0]) * 100 });
     }
     prRows.sort((a, b) => b.kp - a.kp);
     $('finProd').innerHTML = tblHead(t('lbl_prod')) + `<tbody>${top(prRows).map((x) => rowHtml(x)).join('') || `<tr><td colspan="7" class="empty">${esc(t('noData'))}</td></tr>`}</tbody>`;
@@ -225,7 +244,7 @@ function renderFin() {
     $('finProdSub').textContent = t('finProdSub', { min: eur.format(FIN_MIN_PROD) });
   }
 
-  FIN = { kpis, note: $('finNote').textContent, head, firstCol, pgTitle, pgRows, klRows: top(klRows), prRows: top(prRows), klSub: $('finKlantSub').textContent, prSub: mode === 'prod' ? $('finProdSub').textContent : '', evolNote: evolNote.join(' '), mode, axis: UI.finAxis };
+  FIN = { kpis, note: $('finNote').textContent, head, firstCol, pgTitle, pgRows, klRows: top(klRows), prRows: top(prRows), klSub: $('finKlantSub').textContent, prSub: finMonthly(mode) ? $('finProdSub').textContent : '', evolNote: evolNote.join(' '), mode, axis: UI.finAxis };
 }
 
 
@@ -263,14 +282,15 @@ function renderFinChart(mode, R, rows) {
 }
 
 function finChartKlacht(mode, R, rows) {
-  const gran = mode === 'prod' ? UI.finGran : 'Y';
+  const monthly = finMonthly(mode);
+  const gran = monthly ? UI.finGran : 'Y';
   document.querySelectorAll('#segFinGran button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.v === gran); b.disabled = mode !== 'prod' && b.dataset.v !== 'Y';
+    b.classList.toggle('on', b.dataset.v === gran); b.disabled = !monthly && b.dataset.v !== 'Y';
     b.title = b.disabled ? t('finGranKlant') : '';
   });
   // Bij een klant (omzet enkel per jaar) toont de grafiek alle jaren, niet enkel de gekozen periode.
   let RC = R, chartRows = rows;
-  if (mode !== 'prod') {
+  if (!monthly) {
     const all = DATA.rows.filter((r) => matches(r, 'period'));
     let y0 = Infinity, y1 = -Infinity; for (const r of DATA.rows) { const y = new Date(r.d * 864e5).getUTCFullYear(); if (y < y0) y0 = y; if (y > y1) y1 = y; }
     RC = { m0: y0 * 12, m1: y1 * 12 + 11, y0, y1 }; chartRows = all;
@@ -311,7 +331,7 @@ function finChartKlacht(mode, R, rows) {
   });
   const maxD = DATA.rows.reduce((m, r) => Math.max(m, r.d), 0);
   const lastPartial = keys.length && keyOf(monthIdx(maxD + 1)) === keys[keys.length - 1];
-  const evolNote = [t(mode === 'prod' ? 'finEvolNoteProd' : 'finEvolNoteKlant')]; if (lastPartial) evolNote.push(t('finEvolPartial'));
+  const evolNote = [t(monthly ? 'finEvolNoteProd' : 'finEvolNoteKlant')]; if (lastPartial) evolNote.push(t('finEvolPartial'));
   finLegend2(rl, cl, evolNote);
   return evolNote;
 

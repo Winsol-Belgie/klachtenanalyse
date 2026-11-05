@@ -175,9 +175,9 @@ function findSheets(wb) {
         : hdr.includes('BVOLGN') ? 'oorzaak'
         : hdr.includes('LTYPE') && hdr.includes('LCODE') ? 'lookup'
         : hdr.includes('OORNR') && hdr.includes('OBRON') ? 'orders'
+        : hdr.includes('VKLANT') && hdr.includes('VOMZET') ? 'vklant'
         : hdr.includes('VPROD') && hdr.includes('PMAAND') ? 'vprodP'
         : hdr.includes('VPROD') && hdr.includes('VMAAND') ? 'vprod'
-        : hdr.includes('VKLANT') && hdr.includes('VOMZET') ? 'vklant'
         : hdr.includes('POORNR') && hdr.includes('POPLAA') ? 'plaatsers' : null;
       if (kind) {
         const idx = {}; hdr.forEach((h, j) => { idx[h] = j; });
@@ -277,7 +277,11 @@ function buildData(sheets, fileName, fileDate) {
     for (const r of krows) {
       const id = String(r[ki.VKLANT] ?? '').trim(); const f = PFX[id.slice(0, 2)]; if (!f) continue;
       const key = `${f}-${num(id.slice(2))}`, y = num(r[ki.VJAAR]);
-      (klantSales[key] ||= {})[y] = [Math.round(num(r[ki.VOMZET]) * 100) / 100, num(r[ki.VORDERS])];
+      if (ki.VPROD != null && ki.VMAAND != null) {
+        // nieuwe query 7: per klant × product × maand → [jaar, maand, product, productgroep, omzet, orders]
+        const m = num(r[ki.VMAAND]); if (!y || !m) continue;
+        (klantSales[key] ||= []).push([y, m, num(r[ki.VPROD]), String(r[ki.VPG] ?? '').trim(), Math.round(num(r[ki.VOMZET]) * 100) / 100, num(r[ki.VORDERS])]);
+      } else (klantSales[key] ||= {})[y] = [Math.round(num(r[ki.VOMZET]) * 100) / 100, num(r[ki.VORDERS])];
     }
   }
 
@@ -480,7 +484,20 @@ function renderDataInfo() {
     (ME && ['sales', 'dir'].includes(ME.role) ? '<br>' + esc(t('dataScope', { vts: ME.vts.join(', ') })) : '');
 }
 
+// Omzet per klant: nieuw formaat = lijst [jaar, maand, product, pg, omzet, orders] (query 7 per klant × product × maand),
+// oud formaat = { jaar: [omzet, orders] }. Bij het nieuwe formaat: klantP (zelfde vorm als de productverkoop) + jaartotalen.
+function prepKlantSales(sales) {
+  const ks = sales && sales.klant; if (!ks) return;
+  const keys = Object.keys(ks); if (!keys.length || !Array.isArray(ks[keys[0]])) return;
+  const P = {}, Y = {};
+  for (const k of keys) {
+    const list = ks[k]; const a = P[k] = new Array(list.length); const y = Y[k] = {};
+    for (let i = 0; i < list.length; i++) { const x = list[i]; a[i] = [x[0], x[1], x[2], x[3], x[4], 0, x[5]]; const e = y[x[0]] || (y[x[0]] = [0, 0]); e[0] += x[4]; e[1] += x[5]; }
+  }
+  sales.klantP = P; sales.klant = Y;
+}
 function applyData(data) {
+  prepKlantSales(data.sales);
   DATA = data;
   indexDossiers(data.rows);
   renderDataInfo();
