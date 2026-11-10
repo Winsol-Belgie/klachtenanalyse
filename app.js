@@ -843,9 +843,9 @@ function matches(r, skip) {
   }
   if (F.text) {
     const t = F.textLc;
-    // Ordernummer in eender welke notatie (67-02-0201-6, 67.02.0201.6, 670202016, ook een deel): zoekt in order en NTR-order.
+    // Ordernummer in eender welke notatie (67-02-0201-6, 67.02.0201.6, 670202016, ook een deel): zoekt in order, NTR-order en het oorspronkelijke order van het dossier (rootOrder).
     const od = F.textOrd;
-    if (od && (String(r.order || '').includes(od) || String(r.ntrOrder || '').includes(od))) return true;
+    if (od && (String(r.order || '').includes(od) || String(r.ntrOrder || '').includes(od) || String(r.rootOrder || '').includes(od))) return true;
     if (!(r.oms.toLowerCase().includes(t) || r.opl.toLowerCase().includes(t) || r.oorz.some((o) => (o.oorzaak + ' ' + o.corr + ' ' + o.corrA).toLowerCase().includes(t)))) return false;
   }
   return true;
