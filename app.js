@@ -352,7 +352,7 @@ let DATA = null;          // { rows, fileName, fileDate }
 const F = { from: null, to: null, pg: new Set(), prod: new Set(), tree: new Set(), ntr: new Set(), fout: new Set(), klant: new Set(), status: new Set(), vert: new Set(), regio: new Set(), open: '', info: 'excl', actie: new Set(), vervolg: '', text: '' };
 let HIDDEN_YEARS = new Set(); try { HIDDEN_YEARS = new Set(JSON.parse(localStorage.getItem('kl_hiddenYears') || '[]')); } catch { /* geen opslag */ }
 const saveHidden = () => { try { localStorage.setItem('kl_hiddenYears', JSON.stringify([...HIDDEN_YEARS])); } catch { /* geen opslag */ } };
-const UI = { report: 'klachten', finTeller: 'orders', finGran: 'Q', finAxis: 'klacht', finWin12: true, finCurve: 'ratio', mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
+const UI = { report: 'klachten', finTeller: 'orders', finGran: 'Q', finAxis: 'klacht', finWin12: false, finCurve: 'ratio', mode: 'time', cumGran: 'W', target: '', gran: 'M', measure: 'n', split: '', page: 0, sort: { key: 'd', dir: -1 }, treeLevel: 3 };
 let filtered = [];
 let CHIPS = []; // labels van de actieve filters (ook voor het PDF-rapport)
 let chart = null;
