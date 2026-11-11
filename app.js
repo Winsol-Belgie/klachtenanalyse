@@ -257,7 +257,7 @@ function buildData(sheets, fileName, fileDate) {
     // namen van producten en productgroepen (ook voor producten zonder klacht)
     const pn = {}, pgn = {};
     for (const x of prod) { if (!(x[2] in pn)) pn[x[2]] = lk('PRODUCT', x[2]) || ''; if (!(x[3] in pgn)) pgn[x[3]] = lk('PG', x[3]) || ''; }
-    // Query 9: dezelfde verkoop per PRODUCTIEMAAND van het order (voor de cohort-grafiek)
+    // Query 9: dezelfde verkoop per PRODUCTIEMAAND van het order (voor de productiemaand-grafiek)
     let prodP = null;
     if (sheets.vprodP) {
       const { idx: pi, rows: prows } = sheets.vprodP; prodP = [];
