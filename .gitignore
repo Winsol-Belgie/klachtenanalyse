@@ -15,4 +15,5 @@ admin.json
 # Documentatie (bevat account- en beveiligingsinfo en de AS400-queries) niet online
 README.md
 DATA_OPHALEN.md
+PRODUCTINFO_QUERIES.md
 PEPPER.txt

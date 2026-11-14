@@ -424,7 +424,7 @@ async function loadFromServer(retry = true) {
     if (handleAuthFailure(status)) return;
     if (!ok) throw new Error(data.error || t('unknownError'));
     META = data;
-    if (ME.role === 'admin') showLastUpload();
+    if (ME.role === 'admin') { showLastUpload(); if (typeof showPiInfo === 'function') showPiInfo(); }
     if (!data.available) {
       DATA = null; $('main').hidden = true; $('pdfBtn').disabled = true;
       $('dataInfo').textContent = ME.role === 'admin' ? t('dataNoneAdmin') : t('dataNone');
@@ -446,13 +446,15 @@ async function loadFromServer(retry = true) {
       done++; setLoading(true, t('dataLoadingN', { done, total: vts.length }));
     });
     // Een blok is een lijst klachten (oud formaat) of { rows, ks } / { sp } (sinds de verkoopdata).
-    const rows = [], klantSales = {}; let sp = null;
+    const rows = [], klantSales = {}, piParts = []; let sp = null;
     for (const p of parts) {
       if (Array.isArray(p)) { rows.push(...p); continue; }
+      if (p.pi) { piParts.push(p.pi); continue; } // productkenmerken (prod.js)
       if (p.rows) rows.push(...p.rows);
       if (p.ks) Object.assign(klantSales, p.ks);
       if (p.sp) sp = p;
     }
+    if (typeof setPiData === 'function') setPiData(piParts);
     applyData({ rows, sales: { prod: sp ? sp.sp : null, prodP: sp ? sp.spp || null : null, pn: sp ? sp.pn || {} : {}, pgn: sp ? sp.pgn || {} : {}, klant: Object.keys(klantSales).length ? klantSales : null }, version: data.version, uploadedAt: data.uploadedAt, fileName: data.fileName });
     setStatus('');
   } catch (e) {
@@ -528,6 +530,7 @@ function showApp(user) {
   $('topbarRole').textContent = roleLabel(user.role);
   const isAdmin = user.role === 'admin';
   $('adminDataCard').hidden = !isAdmin;
+  if ($('adminProdCard')) $('adminProdCard').hidden = !isAdmin;
   $('usersCard').hidden = !isAdmin;
   loadFromServer();
 }
@@ -614,6 +617,8 @@ async function prepareUpload(file) {
       chunks[vt] = { n: list.length, h, bytes: (oldChunks[vt] && oldChunks[vt].h === h) ? oldChunks[vt].bytes : 0 };
       if (!oldChunks[vt] || oldChunks[vt].h !== h) changed.push({ vt, json, payload });
     }
+    // Productkenmerken (prod.js) staan in eigen blokken: die blijven ongewijzigd bij het opladen van de klachten.
+    if (typeof isPiVt === 'function') for (const [vt, c] of Object.entries(oldChunks)) if (isPiVt(vt)) chunks[vt] = c;
     const removedVts = Object.keys(oldChunks).filter((vt) => !chunks[vt]);
     PENDING = { chunks, changed, diff, fileName: file.name, fileDate: file.lastModified, nothing: !changed.length && !removedVts.length };
     $('dataDrop').classList.add('has-file');
@@ -834,6 +839,7 @@ function matches(r, skip) {
   if (F.vervolg === 'vervolg' && !r.vervolg) return false;
   if (F.vervolg === 'ander' && !r.andereOpOrder) return false;
   if (F.info === 'only' && !r.info) return false;
+  if (skip !== 'pk' && typeof pkMatch === 'function' && !pkMatch(r)) return false;
   if (F.open === 'open' && !r.open) return false;
   if (F.open === 'closed' && r.open) return false;
   if (skip !== 'tree' && F.tree.size) {
@@ -853,8 +859,10 @@ function matches(r, skip) {
 
 function update() {
   if (!DATA) return;
+  if (typeof pkSync === 'function') pkSync();
   filtered = DATA.rows.filter((r) => matches(r));
   renderChips();
+  if (typeof renderPkCard === 'function') renderPkCard();
   activeReport().render();
 }
 
@@ -863,14 +871,15 @@ function update() {
  * Een nieuw rapport toevoegen: een <div class="rep" id="rep_<id>"> in index.html,
  * een regel hieronder (id, titel-sleutel in i18n.js, render-functie, optioneel pdf-functie in report.js). */
 const REPORTS = [
-  { id: 'klachten', label: 'repKlachten', render: () => { renderKpi(); renderTrend(); renderTops(); renderTable(); } },
+  { id: 'klachten', label: 'repKlachten', render: () => { renderKpi(); if (typeof renderPkRatio === 'function') renderPkRatio(); renderTrend(); renderTops(); renderTable(); } },
   { id: 'fin', label: 'repFin', render: () => renderFin() },
 ];
 try { const r = localStorage.getItem('kl_report'); if (REPORTS.some((x) => x.id === r)) UI.report = r; } catch { /* geen opslag */ }
-function activeReport() { return REPORTS.find((r) => r.id === UI.report) || REPORTS[0]; }
+const availReports = () => REPORTS.filter((r) => !r.avail || r.avail()); // bv. Producten enkel met productdata
+function activeReport() { const l = availReports(); return l.find((r) => r.id === UI.report) || l[0]; }
 function renderTabs() {
   const cur = activeReport().id;
-  $('repTabs').innerHTML = REPORTS.map((r) => `<button type="button" role="tab" data-rep="${r.id}" class="${r.id === cur ? 'on' : ''}" aria-selected="${r.id === cur}">${esc(t(r.label))}</button>`).join('');
+  $('repTabs').innerHTML = availReports().map((r) => `<button type="button" role="tab" data-rep="${r.id}" class="${r.id === cur ? 'on' : ''}" aria-selected="${r.id === cur}">${esc(t(r.label))}</button>`).join('');
   for (const r of REPORTS) $('rep_' + r.id).hidden = r.id !== cur;
 }
 $('repTabs').addEventListener('click', (e) => {
@@ -901,6 +910,7 @@ function renderChips() {
   if (F.vervolg) add(t({ first: 'vvFirst', vervolg: 'vvOnly', ander: 'vvAnder' }[F.vervolg]), () => { F.vervolg = ''; $('fVervolg').value = ''; });
   if (F.info !== 'excl') add(F.info === 'only' ? t('infoOnly') : t('chipInfoIncl'), () => { F.info = 'excl'; $('fInfo').value = 'excl'; });
   if (F.text) add(t('chipSearch', { q: F.text }), () => { F.text = ''; $('fText').value = ''; });
+  if (typeof pkChips === 'function') pkChips(add);
   CHIPS = c.map((x) => ({ label: x.label, tip: x.tip }));
   const el = $('chips');
   el.innerHTML = c.map((x, i) => `<span class="chip${x.key ? ' link' : ''}"${x.tip ? ` title="${esc(x.tip)}"` : ''}${x.key ? ` data-k="${x.key}"` : ''}>${esc(x.label)}${x.clear ? `<button type="button" data-i="${i}" title="${esc(t('remove'))}">×</button>` : ''}</span>`).join('') +
@@ -914,6 +924,7 @@ function renderChips() {
   const ca = $('clearAll');
   if (ca) ca.addEventListener('click', () => {
     for (const k of Object.keys(names)) { F[k].clear(); MS[k].syncBtn(); }
+    if (typeof pkClear === 'function') pkClear();
     F.open = ''; F.info = 'excl'; $('fInfo').value = 'excl'; F.vervolg = ''; $('fVervolg').value = ''; F.text = ''; $('fOpen').value = ''; $('fText').value = ''; UI.page = 0; update();
   });
 }
